@@ -1,0 +1,22 @@
+REGEDIT4
+
+; Ohne diese beiden Werte landet die USB-Tastatur auf KeyboardClass1,
+; und der Raw Input Thread von USER liest nur KeyboardClass0.  Belegt
+; im DDK-Quelltext, ddk/src/input/kbdclass/KBDCLASS.C Zeile 2200 ff.
+; und 2869 ff.:
+;
+;   "Note that for Product 1, the Raw Input Thread (Windows USER) will
+;    only deign to open and read from one keyboard device."
+;
+; MaximumPortsServiced hat den Vorgabewert 1 und wird auf die Anzahl der
+; Eintraege unter HKLM\HARDWARE\DEVICEMAP\KeyboardPort heruntergeklemmt.
+; ConnectMultiplePorts = 1 macht aus dem 1:1-Verhaeltnis ein 1:viele --
+; KeyboardClass0 bedient dann PS/2 und USB zugleich.
+
+[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\Kbdclass\Parameters]
+"MaximumPortsServiced"=dword:00000004
+"ConnectMultiplePorts"=dword:00000001
+
+[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\Mouclass\Parameters]
+"MaximumPortsServiced"=dword:00000004
+"ConnectMultiplePorts"=dword:00000001

@@ -1,0 +1,56 @@
+; USBNT.INF -- FreeBSD-USB fuer NT 4.0 fuer Windows NT 4.0
+;
+; Einrichten:  Rechtsklick auf diese Datei -> Installieren
+;      oder:   rundll32 setupapi,InstallHinfSection DefaultInstall 132 .\USBNT.INF
+;
+; Danach neu starten.
+;
+; HINWEIS: USBINST.EXE ist der bessere Weg -- es waehlt die Bauart des
+; USB-Controllers (UHCI/OHCI/EHCI/xHCI) und richtet den Geraetemanager
+; mit ein.  Diese INF richtet nur den Kerntreiber ein.
+;
+; (frueherer Hinweis bezog sich auf die Soundkarte
+; im Rechner steckt.  Es sucht den ersten freien winmm-Namen (wave, sonst
+; wave1..wave9 und mixer, sonst mixer1..9) und laesst die vorhandene Karte
+; in Ruhe.  Diese INF traegt fest "wave1" und "mixer1" ein -- richtig fuer
+; den Fall MIT vorhandener Soundkarte.  Ist USB-Audio das EINZIGE Geraet,
+; bitte AUDIOINST.EXE benutzen oder unten wave1/mixer1 in wave/mixer
+; aendern.
+;
+; Entfernen: ENTFERNE.BAT  (oder AUDIOINST.EXE aus)
+
+[Version]
+Signature  = "$Windows NT$"
+Class      = MEDIA
+Provider   = %Hersteller%
+
+[DefaultInstall]
+CopyFiles  = Dateien.Sys
+AddReg     = Reg.Dienst
+
+[DestinationDirs]
+Dateien.Sys = 12                ; %SystemRoot%\system32\drivers
+
+[Dateien.Sys]
+USBNT.SYS
+
+; ---- Kerntreiber als Dienst -------------------------------------------
+; Start 1 = beim Systemstart (der USB-Stapel muss frueh da sein).
+[Reg.Dienst]
+HKLM,"SYSTEM\CurrentControlSet\Services\usbnt","Type",0x00010001,1
+HKLM,"SYSTEM\CurrentControlSet\Services\usbnt","Start",0x00010001,1
+HKLM,"SYSTEM\CurrentControlSet\Services\usbnt","ErrorControl",0x00010001,1
+HKLM,"SYSTEM\CurrentControlSet\Services\usbnt","Group",0x00000000,"Extended base"
+HKLM,"SYSTEM\CurrentControlSet\Services\usbnt","ImagePath",0x00000000,"System32\DRIVERS\usbnt.sys"
+HKLM,"SYSTEM\CurrentControlSet\Services\usbnt","DisplayName",0x00000000,"FreeBSD-USB fuer NT 4.0"
+
+[SourceDisksNames]
+1 = %Datentraeger%,,
+
+[SourceDisksFiles]
+USBNT.SYS = 1
+
+
+[Strings]
+Hersteller   = "FreeBSD-USB auf NT 4.0"
+Datentraeger = "USB-Audio fuer NT 4.0"

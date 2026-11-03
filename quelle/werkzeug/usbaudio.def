@@ -1,0 +1,6 @@
+LIBRARY usbaudio
+EXPORTS
+    DriverProc=DriverProc@20
+    wodMessage=wodMessage@20
+    widMessage=widMessage@20
+    mxdMessage=mxdMessage@20

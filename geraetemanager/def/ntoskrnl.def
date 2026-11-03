@@ -1,0 +1,13 @@
+LIBRARY ntoskrnl.exe
+EXPORTS
+    IoCreateDevice@28
+    IoCreateSymbolicLink@8
+    IoDeleteDevice@4
+    IoDeleteSymbolicLink@4
+    MmMapIoSpace@16
+    MmUnmapIoSpace@8
+    RtlInitUnicodeString@8
+    @IofCompleteRequest@8
+    sprintf
+    memcpy
+    memset

@@ -1,0 +1,21 @@
+LIBRARY KERNEL32.dll
+EXPORTS
+    GetModuleHandleA@4
+    GetModuleFileNameA@12
+    GetSystemDirectoryA@8
+    GetWindowsDirectoryA@8
+    GetComputerNameA@8
+    CreateFileA@28
+    ReadFile@20
+    GetFileSize@8
+    CloseHandle@4
+    WriteFile@20
+    FlushFileBuffers@4
+    DeleteFileA@4
+    CopyFileA@12
+    GetFileAttributesA@4
+    DeviceIoControl@32
+    VirtualAlloc@16
+    VirtualFree@12
+    ExitProcess@4
+    GetLastError@0

@@ -1,0 +1,7 @@
+Quelle: https://github.com/freebsd/freebsd-src  main
+Commit: 139fa2c12ddc028048efe3946f2663dcfba9b122 (2026-10-07)
+Ausschnitt: sys/dev/usb/*.{c,h} ohne usb_fdt_support.c, usb_hub_acpi.c;
+  controller/: usb_controller.c und uhci/ohci/ehci/xhci (+_pci.c, Kopfdateien);
+  quirk/; dev/hid/hid.c und Kopfdateien.
+usbdevs.h erzeugt: awk -f sys/tools/usbdevs2h.awk sys/dev/usb/usbdevs -h
+Bauen: SRC=<dieses Verzeichnis>, siehe bau-clangcl.sh

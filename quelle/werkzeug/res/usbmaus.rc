@@ -1,0 +1,7 @@
+/* Symbol und Texte fuer das Systemsteuerungs-Element "USB-Maus". */
+1 ICON "usbmaus.ico"
+STRINGTABLE
+BEGIN
+    1 "USB-Maus"
+    2 "Maustasten 1 bis 8 erkennen und belegen"
+END

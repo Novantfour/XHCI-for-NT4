@@ -1,0 +1,71 @@
+; USBAUDIO.INF -- USB-Audio (UAC1) fuer Windows NT 4.0
+;
+; Einrichten:  Rechtsklick auf diese Datei -> Installieren
+;      oder:   rundll32 setupapi,InstallHinfSection DefaultInstall 132 .\USBAUDIO.INF
+;
+; Danach neu starten.
+;
+; HINWEIS: AUDIOINST.EXE ist der bessere Weg, wenn schon eine Soundkarte
+; im Rechner steckt.  Es sucht den ersten freien winmm-Namen (wave, sonst
+; wave1..wave9 und mixer, sonst mixer1..9) und laesst die vorhandene Karte
+; in Ruhe.  Diese INF traegt fest "wave1" und "mixer1" ein -- richtig fuer
+; den Fall MIT vorhandener Soundkarte.  Ist USB-Audio das EINZIGE Geraet,
+; bitte AUDIOINST.EXE benutzen oder unten wave1/mixer1 in wave/mixer
+; aendern.
+;
+; Entfernen: ENTFERNE.BAT  (oder AUDIOINST.EXE aus)
+
+[Version]
+Signature  = "$Windows NT$"
+Class      = MEDIA
+Provider   = %Hersteller%
+
+[DefaultInstall]
+CopyFiles  = Dateien.Sys, Dateien.Dll, Dateien.Exe
+AddReg     = Reg.Dienst, Reg.Drivers32
+
+[DestinationDirs]
+Dateien.Sys = 12                ; %SystemRoot%\system32\drivers
+Dateien.Dll = 11                ; %SystemRoot%\system32
+Dateien.Exe = 11
+
+[Dateien.Sys]
+USBAUDIO.SYS
+
+[Dateien.Dll]
+USBAUDIO.DLL
+
+[Dateien.Exe]
+USBTON.EXE
+
+; ---- Kerntreiber als Dienst -------------------------------------------
+; Start 3 = manuell; USBINST/der USB-Stapel laedt ihn beim Anstecken.
+; Group "Extended base" laeuft nach dem USB-Grundtreiber an.
+[Reg.Dienst]
+HKLM,"SYSTEM\CurrentControlSet\Services\usbaudio","Type",0x00010001,1
+HKLM,"SYSTEM\CurrentControlSet\Services\usbaudio","Start",0x00010001,3
+HKLM,"SYSTEM\CurrentControlSet\Services\usbaudio","ErrorControl",0x00010001,1
+HKLM,"SYSTEM\CurrentControlSet\Services\usbaudio","Group",0x00000000,"Extended base"
+HKLM,"SYSTEM\CurrentControlSet\Services\usbaudio","ImagePath",0x00000000,"System32\DRIVERS\usbaudio.sys"
+HKLM,"SYSTEM\CurrentControlSet\Services\usbaudio","DisplayName",0x00000000,"USB-Audio (UAC1)"
+
+; ---- winmm: Wave-Treiber und Mixer ------------------------------------
+; winmm laedt Mixer-Treiber NUR ueber einen eigenen mixer-Eintrag, nicht
+; ueber den wave-Eintrag -- beide sind noetig (sonst keine
+; Lautstaerkeregelung).
+[Reg.Drivers32]
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Drivers32","wave1",0x00000000,"usbaudio.dll"
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Drivers32","mixer1",0x00000000,"usbaudio.dll"
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Drivers.desc","usbaudio.dll",0x00000000,"USB-Audio (UAC1)"
+
+[SourceDisksNames]
+1 = %Datentraeger%,,
+
+[SourceDisksFiles]
+USBAUDIO.SYS = 1
+USBAUDIO.DLL = 1
+USBTON.EXE   = 1
+
+[Strings]
+Hersteller   = "FreeBSD-USB auf NT 4.0"
+Datentraeger = "USB-Audio fuer NT 4.0"

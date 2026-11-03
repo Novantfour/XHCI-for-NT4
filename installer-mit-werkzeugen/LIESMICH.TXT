@@ -1,0 +1,106 @@
+FreeBSD-USB fuer Windows NT 4.0 -- Installer, Fassung 2026.10.9.5
+==================================================================
+
+Einrichten: USBSETUP.EXE starten (als Administrator).
+  1. Treiber waehlen (USBNT = alle Controller, empfohlen).
+  2. "Einrichten".  Vorher erscheint ein Pruef-Fenster mit allem, was sich
+     nicht vertraegt -- angehakte Eintraege werden abgeschaltet, ihr alter
+     Zustand wird gesichert:
+       Maustreiber   fremde Maus-/Tastaturfilter (Logitech MouseWare,
+                     IntelliPoint ...).  Logitech hielt Klicks der USB-Maus
+                     ~3 s fest.  Vorgewaehlt.
+       Autostart     deren Programme (em_exec.exe, point32.exe ...).
+                     Vorgewaehlt.
+       USB-Treiber   ein anderer USB-Stapel.  Vorgewaehlt.
+       PS/2          i8042prt.  NICHT vorgewaehlt.  Ohne PS/2-Tastatur
+                     schreibt er harmlose Meldungen 15/17/19/20/26; nur
+                     abschalten, wenn weder PS/2-Tastatur noch -Maus
+                     gebraucht wird.
+  3. Neu starten.
+"Ausprobieren" laedt den Treiber nur bis zum naechsten Neustart.
+"Entfernen" nimmt alles zurueck -- auch das im Pruef-Fenster Abgeschaltete.
+Diagnoseausgabe: Vorgabe "Aus" (COM1/COM2 nur zur Fehlersuche).
+
+Was eingerichtet wird
+---------------------
+  USBNT.SYS (oder UHCINT/OHCINT/EHCINT/XHCINT)   der Treiber
+  Tastatur, Maus (Tasten 1-8, Rad), Speicher, Drucker (auch IPP over USB),
+  Medien- und Sondertasten.
+  Gamepads und Xbox-Controller: eigenes Paket (installer-xbox, XBOXINST).
+  USB-Audio (Soundkarten, Headsets): eigenes Paket (installer-audio, AUDIOINST).
+  Systemsteuerung:
+    Maus      -> Reiter "USB-Maustasten"   (USBMAUSX.DLL)
+    Tastatur  -> Reiter "Sondertasten"     (USBTASTX.DLL)
+    USB-Maus  -> wie der Reiter, als eigenes Symbol (USBMAUS.CPL)
+    Geraetemanager -> PCI- und USB-Geraete (DEVMGR.CPL; auch DEVMGR.EXE)
+                 USB wie lsusb: Geraete unter ihrem Hub, Hersteller,
+                 Produkt, Kennung, Geschwindigkeit, Schnittstellen mit
+                 Treiber; "Diagnose" schreibt eine lsusb-Liste mit.
+                 "PCI.IDS..." zeigt den Stand der Geraetenamen und
+                 aktualisiert sie: aus dem Internet (Vorgabe
+                 https://pci-ids.ucw.cz/v2.2/pci.ids; aenderbar unter
+                 HKLM\SOFTWARE\Geraetemanager, Wert PciIdsUrl) oder aus
+                 einer Datei, die man anderswo geladen hat.  Die alte
+                 bleibt als PCI.IDS.ALT.
+    PCIHOLE.EXE + CACERT.PEM -> HTTPS fuer "PCI.IDS...": TLS 1.2 (wolfSSL),
+                 prueft Zertifikatskette UND Rechnernamen; ohne CACERT.PEM
+                 laedt es nicht.  Fehlt PCIHOLE, versucht der Geraete-
+                 manager dieselbe Adresse mit http://.  CACERT.PEM ist die
+                 Mozilla-Liste (Stand dieses Pakets) -- wer sie spaeter
+                 erneuert, ersetzt einfach die Datei in system32.
+  PCI.IDS (Stand 2026.09.25) liegt bei; USBINST legt sie nach system32,
+  wenn dort noch keine ist.
+  Zusatzprogramme (USBTASTEN, SONDERSET, USBTEST, USBGERAET, USBDRUCK,
+  JOYTEST) liegen im eigenen Paket USBNT-WERKZEUGE -- der Treiber braucht
+  sie nicht.  Liegen sie beim Einrichten neben USBINST.EXE, richtet es sie
+  mit ein.
+
+Per Befehl (USBINST.EXE)
+------------------------
+  usbinst                     Zustand
+  usbinst pruefen             fremde Maus-/USB-Treiber, PS/2 auflisten
+  usbinst abschalten <fund>   z. B. dienst:LMouFilt  run:hklm:MouseWare
+  usbinst wieder              Abgeschaltetes zurueck
+  usbinst probe|ein [art] [-seriell 0|1|2]    usbinst aus
+
+Messwerkzeuge fuer die Fehlersuche (MAUSDATEN, MAUSLATENZ, KLICKTEST,
+EINGABETEST, XHCITEST, IPPTEST) liegen im eigenen Paket USBNT-DIAGNOSE.
+
+Geht beim Booten etwas schief: LEERTASTE beim Start, "Letzte als
+funktionierend bekannte Konfiguration".
+
+Geprueft in NT 4.0 SP6a (QEMU): Pruefung, Abschalten, Wiederherstellen,
+Einrichten, Entfernen, mit vorgetaeuschter Logitech-Installation.
+Pruefsummen (SHA-256): PRUEFSUMMEN.TXT.
+
+Virenscanner
+------------
+Einige Scanner melden Treiber wie diesen heuristisch ("Heur", "Gen:",
+"susgen", "Malicious (moderate confidence)"): ein Kerneltreiber ohne
+Microsoft-Signatur, der Tastatur- und Mauseingaben einspeist (Sonder- und
+Maustasten) und ein Installer,
+der fremde Maustreiber abschalten kann (USBINST pruefen/abschalten) --
+alles Merkmale, die auch Schadsoftware hat.  Nichts davon greift aufs Netz
+zu.  Der vollstaendige Quelltext und die Bauskripte liegen im Gesamtpaket;
+wer mag, baut selbst und vergleicht die Pruefsummen.
+
+
+Abschnittsattribute der Treiber (Fassung 2026.10.4.1)
+-------------------------------------------------
+Ray Hinchliffe (SIV) wies darauf hin, dass .text und .data der
+frueheren Fassung als auslagerbar (paged) markiert waren.  Das ist
+gefaehrlich: wird Treibercode ausgelagert und laeuft dann bei
+erhoehtem IRQL, gibt es einen Bluescreen.  Behoben -- die Attribute
+entsprechen jetzt genau denen seines eigenen SIVNT4.SYS:
+    .text  68000020  Code, nicht auslagerbar, NICHT schreibbar
+    .data  c8000040  nicht auslagerbar
+    INIT   e2000020  DriverEntry, nach dem Start freigegeben
+Betrifft USBNT/UHCINT/OHCINT/EHCINT/XHCINT und PCISCAN (Geraete-
+manager).  Geprueft in NT 4.0 SP6a: Controller, Tastatur, Maus und
+Massenspeicher arbeiten unveraendert.
+
+USBNT.INF -- Einrichten per INF
+  Rechtsklick auf USBNT.INF -> Installieren, danach neu starten.
+  Die mitgelieferte EXE ist der bessere Weg (sie prueft Vorhandenes
+  und waehlt freie Eintraege); die INF ist fuer alle, die den
+  Windows-eigenen Weg bevorzugen.

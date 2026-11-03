@@ -1,0 +1,81 @@
+# Einfuhrliste -- erzeugt vom Binderlauf, nicht von Hand.
+# Jeder Name kommt aus nm ueber die 31 Objektdateien und ist
+# gegen tools/ntkrnlmp.def bzw. die HAL-Ausfuhr geprueft.
+
+## NTOSKRNL (in tools/ntkrnlmp.def belegt)
+ExAllocatePoolWithTag
+ExFreePool
+IoCompleteRequest
+IoConnectInterrupt
+IoCreateDevice
+IoCreateSymbolicLink
+IoDeleteDevice
+IoDeleteSymbolicLink
+IoDisconnectInterrupt
+KeBugCheckEx
+KeCancelTimer
+KeDelayExecutionThread
+KeGetCurrentThread
+KeInitializeDpc
+KeInitializeEvent
+KeInitializeMutex
+KeInitializeSpinLock
+KeInitializeTimer
+KeInsertQueueDpc
+KeReleaseMutex
+KeSetEvent
+KeSetTimer
+KeSetTimerEx
+KeWaitForSingleObject
+KiSerialPutString
+MmGetPhysicalAddress
+MmMapIoSpace
+MmUnmapIoSpace
+ObReferenceObjectByHandle
+PsCreateSystemThread
+PsTerminateSystemThread
+READ_REGISTER_UCHAR
+READ_REGISTER_ULONG
+READ_REGISTER_USHORT
+RtlDeleteRegistryValue
+RtlInitUnicodeString
+RtlWriteRegistryValue
+WRITE_REGISTER_UCHAR
+WRITE_REGISTER_ULONG
+WRITE_REGISTER_USHORT
+ZwClose
+_snprintf
+_vsnprintf
+memcpy
+memset
+sprintf
+strcmp
+strlen
+
+## HAL.DLL
+HalAllocateCommonBuffer
+HalFreeCommonBuffer
+HalGetBusDataByOffset
+HalGetInterruptVector
+HalSetBusDataByOffset
+HalTranslateBusAddress
+KeAcquireSpinLock
+KeGetCurrentIrql
+KeLowerIrql
+KeRaiseIrql
+KeReleaseSpinLock
+KeStallExecutionProcessor
+READ_PORT_UCHAR
+READ_PORT_ULONG
+READ_PORT_USHORT
+WRITE_PORT_UCHAR
+WRITE_PORT_ULONG
+WRITE_PORT_USHORT
+
+## Makros im echten ntddk.h -- kein Import
+# Der Pruefbau benutzt eine nachgebaute ntddk.h, in der
+# IoGetCurrentIrpStackLocation eine Funktion ist.  Im echten NT-4.0-DDK
+# ist es ein Makro auf Irp->Tail.Overlay.CurrentStackLocation und
+# erzeugt kein Symbol.  Beim Bau gegen das echte DDK verschwindet der
+# Name von selbst.
+IoGetCurrentIrpStackLocation

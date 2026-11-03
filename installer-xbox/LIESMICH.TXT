@@ -1,0 +1,45 @@
+USB-Gamepads fuer FreeBSD-USB auf Windows NT 4.0 -- Fassung 2026.10.8.1
+======================================================================
+
+Xbox 360, Xbox One, Xbox Series X|S (kabelgebunden) und HID-Gamepads und
+-Joysticks.  Eigener Kerntreiber USBXBOX.SYS; er setzt auf das USB-Paket
+auf (usbnt.sys) und meldet sich beim Laden dort an.
+
+Voraussetzung
+-------------
+Das USB-Paket in der Fassung OHNE eingebauten Joystick-Teil, also ab
+2026.10.8.1, mit USBNT.SYS (nicht den Einzelbauformen UHCINT/OHCINT/...).
+Aeltere USBNT.SYS hatten den Joystick-Teil eingebaut; dann bekaeme der
+alte Teil den Controller zuerst.  XBOXINST prueft das und bricht ab.
+
+Einrichten
+----------
+  1. USB-Paket einrichten bzw. aktualisieren (USBSETUP oder USBINST ein),
+     neu starten.
+  2. EINRICHT.BAT  (= XBOXINST ein), neu starten.
+
+Vorher schaltet XBOXINST das Alte ab und sichert es:
+  - alter Joystick-Treiber fuer winmm (z. B. joystick.dll)
+  - Gameport-Dienst "Joystick", falls eingerichtet
+  - Systemsteuerungssymbol joy.cpl (wird durch USBJOY.CPL ersetzt)
+ENTFERNE.BAT (= XBOXINST aus) schreibt alles zurueck.
+
+Was eingerichtet wird
+---------------------
+  USBXBOX.SYS   Kerntreiber (Dienst usbxbox, Start mit dem System)
+  USBJOY.DLL    Joystick-Treiber fuer winmm: Win32-, Win16- und
+                DirectInput-Spiele
+  USBJOY.CPL    Systemsteuerung -> Joystick: Test, Vibration
+  JOYTEST.EXE   Pruefung an der Befehlszeile (joytest, joytest ruetteln)
+
+Werkzeuge (nicht eingerichtet, nur zum Pruefen)
+  DIPROBE.EXE   zeigt, welche Joysticks DirectInput sieht
+  JOY16.EXE     Win16-Pruefung (JOY16, JOY16 fang 10) -> C:\TEMP\JOY16.TXT
+
+Zustand anzeigen: XBOXINST ohne Argument.
+
+USBXBOX.INF -- Einrichten per INF
+  Rechtsklick auf USBXBOX.INF -> Installieren, danach neu starten.
+  Die mitgelieferte EXE ist der bessere Weg (sie prueft Vorhandenes
+  und waehlt freie Eintraege); die INF ist fuer alle, die den
+  Windows-eigenen Weg bevorzugen.

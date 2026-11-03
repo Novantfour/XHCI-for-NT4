@@ -1,0 +1,19 @@
+;  kiserial.def -- Einfuhrbibliothek fuer den 1017. Export des
+;  selbstgebauten Kernels.  KiSerialPutString steht in keiner
+;  NTOSKRNL.LIB, die Microsoft ausgeliefert hat.
+;
+;      llvm-dlltool -m i386 -k -d kiserial.def -D ntoskrnl.exe \
+;                   -l kiserial.lib
+;
+;  -k (--kill-at) ist PFLICHT.  Der Name traegt hier @4, weil der Ruf
+;  stdcall ist und der Uebersetzer ihn so verzieren wird -- aber das
+;  Exportverzeichnis des Kerns fuehrt ihn UNDEKORIERT, wie alle
+;  NT-Exporte.  Ohne -k sucht der Binder KiSerialPutString@4 und der
+;  Lader findet nichts; die Meldung nennt dann nur den verzierten Namen
+;  und nicht den Grund.
+;
+;  Nachgesehen im Kern selbst, nicht angenommen:
+;      ntoskrpn.exe, 1017 Exporte, darunter genau "KiSerialPutString".
+LIBRARY ntoskrnl.exe
+EXPORTS
+    KiSerialPutString@4

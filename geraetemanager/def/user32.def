@@ -1,0 +1,19 @@
+LIBRARY USER32.dll
+EXPORTS
+    CreateWindowExA@48
+    DefWindowProcA@16
+    DispatchMessageA@4
+    GetMessageA@16
+    LoadCursorA@8
+    LoadIconA@8
+    EnableWindow@8
+    DestroyWindow@4
+    IsDialogMessageA@8
+    GetSystemMetrics@4
+    MessageBoxA@16
+    MoveWindow@24
+    PostQuitMessage@4
+    RegisterClassA@4
+    SendMessageA@16
+    SetWindowTextA@8
+    TranslateMessage@4

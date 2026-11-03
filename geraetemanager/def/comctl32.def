@@ -1,0 +1,8 @@
+LIBRARY COMCTL32.dll
+EXPORTS
+    InitCommonControlsEx@4
+    ImageList_Create@20
+    ImageList_Destroy@4
+    ImageList_ReplaceIcon@12
+    CreatePropertySheetPageA@4
+    PropertySheetA@4

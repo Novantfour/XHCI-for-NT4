@@ -1,0 +1,34 @@
+/* Symbole und Versionsangaben fuer DEVMGR.EXE / DEVMGR.CPL.
+   Die .ico-Dateien erzeugt tools/mkicons.py (BMP-Format, 256 und 16 Farben). */
+1 ICON "devmgr.ico"
+2 ICON "rechner.ico"
+3 ICON "klasse.ico"
+4 ICON "geraet.ico"
+5 ICON "warnung.ico"
+6 ICON "usb.ico"
+7 ICON "hub.ico"
+
+1 VERSIONINFO
+FILEVERSION 1,9,0,0
+PRODUCTVERSION 1,9,0,0
+FILEOS 0x40004
+FILETYPE 1
+BEGIN
+  BLOCK "StringFileInfo"
+  BEGIN
+    BLOCK "040704E4"
+    BEGIN
+      VALUE "CompanyName", "Geraetemanager fuer Windows NT 4.0 (freie Software)"
+      VALUE "FileDescription", "Geraetemanager: PCI- und USB-Geraete"
+      VALUE "FileVersion", "1.9"
+      VALUE "ProductName", "Geraetemanager fuer Windows NT 4.0"
+      VALUE "ProductVersion", "1.9"
+      VALUE "LegalCopyright", "Freie Software; Quelltext liegt bei"
+      VALUE "OriginalFilename", "DEVMGR"
+    END
+  END
+  BLOCK "VarFileInfo"
+  BEGIN
+    VALUE "Translation", 0x0407, 1252
+  END
+END

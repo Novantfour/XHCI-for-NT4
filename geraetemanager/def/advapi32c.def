@@ -1,0 +1,18 @@
+LIBRARY ADVAPI32.dll
+EXPORTS
+    OpenSCManagerA@12
+    CreateServiceA@52
+    OpenServiceA@12
+    StartServiceA@12
+    ControlService@12
+    QueryServiceStatus@8
+    DeleteService@4
+    CloseServiceHandle@4
+    RegOpenKeyExA@20
+    RegCloseKey@4
+    RegQueryValueExA@24
+    RegSetValueExA@24
+    RegEnumKeyExA@32
+    RegEnumValueA@32
+    RegCreateKeyExA@36
+    RegDeleteKeyA@8

@@ -1,0 +1,7 @@
+/* Symbol und Texte fuer das Systemsteuerungs-Element "Joystick" (usbjoy.cpl). */
+1 ICON "usbjoy.ico"
+STRINGTABLE
+BEGIN
+    1 "Joystick"
+    2 "Gamepads, Xbox-Controller und Gameport-Joysticks: Test, Vibration, Einrichten"
+END

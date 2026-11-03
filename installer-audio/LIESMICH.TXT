@@ -1,0 +1,58 @@
+USB-Audio fuer FreeBSD-USB auf Windows NT 4.0 -- Fassung 2026.10.9.6
+====================================================================
+
+USB-Soundkarten, -Headsets und -Lautsprecher nach USB Audio Class 1.0
+(die ueblichen USB-Sticks, C-Media CM108/CM119, TI PCM2902 u. ae.).
+Wiedergabe; Aufnahme kommt spaeter.  UAC2-Geraete (High Speed, viele
+neuere DACs) werden noch nicht angesteuert.
+
+Voraussetzung
+-------------
+Das USB-Paket ab Fassung 2026.10.9.5 mit USBNT.SYS (nicht den
+Einzelbauformen).  AUDIOINST prueft das an den Dateien: usbnt.sys muss
+jede Funktion liefern, die USBAUDIO.SYS braucht -- sonst Abbruch mit dem
+Namen der fehlenden Funktion.
+
+Einrichten
+----------
+  1. USB-Paket einrichten bzw. aktualisieren (USBINST ein), neu starten.
+  2. EINRICHT.BAT  (= AUDIOINST ein), neu starten.
+
+AUDIOINST traegt usbaudio.dll unter dem ersten freien winmm-Namen ein
+("wave", sonst wave1..wave9) und als Mixer ("mixer", sonst mixer1..9)
+-- eine vorhandene Soundkarte bleibt.
+ENTFERNE.BAT (= AUDIOINST aus) nimmt alles wieder heraus.
+
+Was eingerichtet wird
+---------------------
+  USBAUDIO.SYS  Kerntreiber (Dienst usbaudio): haelt den Ton am Laufen,
+                zwei Uebertragungen im Wechsel aus einem Ringpuffer
+  USBAUDIO.DLL  winmm-Wave-Treiber: jedes PCM-Format (8/16 Bit, Mono/
+                Stereo, 8..48 kHz) wird auf das Geraetformat umgerechnet;
+                Lautstaerke (waveOutSetVolume) auf den Regler des Geraets
+  Lautstaerkeregelung (sndvol32, Zubehoer -> Multimedia): Lautsprecher
+                mit Lautstaerke und "Alles aus", Mikrofon unter
+                Optionen -> Eigenschaften -> Aufnahme.  Symbol in der
+                Taskleiste: Systemsteuerung -> Multimedia -> "Lautstaerke-
+                regelung in der Taskleiste anzeigen".
+  USBTON.EXE    Pruefung:
+                  usbton                  Geraet und Deskriptoren
+                  usbton winmm 440 3      Ton ueber winmm, wie ein Programm
+                  usbton wav DATEI.WAV    Datei abspielen
+                  usbton laut -10         Lautstaerke in dB (Lautsprecher)
+                  usbton stumm 1          stumm; mit "mikro": Mikrofon
+                  usbton lautlesen        Regler beider Zweige
+                  usbton wmaufnahme 3 44100 16 2 A.WAV   Aufnahme
+                  usbton roh              Deskriptor als Hex (fuer Fehlerberichte)
+                  usbton mixer            Mixer wie sndvol32 ihn sieht
+  WAVE16.EXE    Pruefung fuer 16-Bit-Programme (nur zum Pruefen, wird
+                nicht eingerichtet): spielt 2 s und schreibt das
+                Ergebnis nach C:\TEMP\WAVE16.TXT
+
+Zustand anzeigen: AUDIOINST ohne Argument.
+
+USBAUDIO.INF -- Einrichten per INF
+  Rechtsklick auf USBAUDIO.INF -> Installieren, danach neu starten.
+  Die mitgelieferte EXE ist der bessere Weg (sie prueft Vorhandenes
+  und waehlt freie Eintraege); die INF ist fuer alle, die den
+  Windows-eigenen Weg bevorzugen.

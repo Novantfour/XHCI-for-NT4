@@ -1,0 +1,4 @@
+LIBRARY USBGERAET
+EXPORTS
+    Geraete = Geraete@16
+    GeraeteInDatei = GeraeteInDatei@16

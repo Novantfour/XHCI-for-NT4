@@ -1,0 +1,240 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="1010" viewBox="0 0 1280 1010" font-family="Arial, Helvetica, sans-serif">
+<defs><marker id="spitze" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><path d="M0,0 L10,4 L0,8 z" fill="#333"/></marker></defs>
+<rect width="1280" height="1010" fill="#fafafa"/>
+<text x="640" y="30" text-anchor="middle" font-size="20" font-weight="bold">FreeBSD-USB auf Windows NT 4.0 — Aufbau und Zugriffswege</text>
+<rect x="10" y="45" width="900" height="105" rx="10" fill="#e8f1fb"/>
+<text x="22" y="62" font-size="13" font-weight="bold" fill="#333">1  Programme (Benutzermodus)</text>
+<rect x="20" y="70" width="118" height="70" rx="6" fill="#fff" stroke="#4a78a8" stroke-width="1.2"/>
+<text x="79.0" y="88" text-anchor="middle" font-size="13" font-weight="bold">Anwendungen</text>
+<text x="79.0" y="104" text-anchor="middle" font-size="11">Editor, Explorer</text>
+<text x="79.0" y="118" text-anchor="middle" font-size="11">IE, Spiele</text>
+<rect x="146" y="70" width="118" height="70" rx="6" fill="#fff" stroke="#4a78a8" stroke-width="1.2"/>
+<text x="205.0" y="88" text-anchor="middle" font-size="13" font-weight="bold">Druckspooler</text>
+<text x="205.0" y="104" text-anchor="middle" font-size="11">lokaler Anschluss</text>
+<text x="205.0" y="118" text-anchor="middle" font-size="11">\\.\USBPRNn</text>
+<rect x="272" y="70" width="118" height="70" rx="6" fill="#fff" stroke="#4a78a8" stroke-width="1.2"/>
+<text x="331.0" y="88" text-anchor="middle" font-size="13" font-weight="bold">Spiele / winmm</text>
+<text x="331.0" y="104" text-anchor="middle" font-size="11">joyGetPosEx</text>
+<text x="331.0" y="118" text-anchor="middle" font-size="11">usbjoy.dll</text>
+<rect x="398" y="70" width="118" height="70" rx="6" fill="#fff" stroke="#4a78a8" stroke-width="1.2"/>
+<text x="457.0" y="88" text-anchor="middle" font-size="13" font-weight="bold">Systemsteuerung</text>
+<text x="457.0" y="104" text-anchor="middle" font-size="11">USB-Maus</text>
+<text x="457.0" y="118" text-anchor="middle" font-size="11">USB-Gamepads</text>
+<rect x="524" y="70" width="118" height="70" rx="6" fill="#fff" stroke="#4a78a8" stroke-width="1.2"/>
+<text x="583.0" y="88" text-anchor="middle" font-size="13" font-weight="bold">Werkzeuge</text>
+<text x="583.0" y="104" text-anchor="middle" font-size="11">usbgeraet · usbdruck</text>
+<text x="583.0" y="118" text-anchor="middle" font-size="11">usbtest · joytest</text>
+<rect x="650" y="70" width="118" height="70" rx="6" fill="#fff" stroke="#4a78a8" stroke-width="1.2"/>
+<text x="709.0" y="88" text-anchor="middle" font-size="13" font-weight="bold">Einrichtung</text>
+<text x="709.0" y="104" text-anchor="middle" font-size="11">USBSETUP.EXE</text>
+<text x="709.0" y="118" text-anchor="middle" font-size="11">→ USBINST.EXE</text>
+<rect x="776" y="70" width="118" height="70" rx="6" fill="#fff" stroke="#4a78a8" stroke-width="1.2"/>
+<text x="835.0" y="88" text-anchor="middle" font-size="13" font-weight="bold">eigene Programme</text>
+<text x="835.0" y="104" text-anchor="middle" font-size="11">Scanner, Audio, …</text>
+<text x="835.0" y="118" text-anchor="middle" font-size="11">über \\.\UsbDevN</text>
+<line x1="460" y1="152" x2="460" y2="178" stroke="#333" stroke-width="1.6" marker-end="url(#spitze)"/>
+<text x="470" y="169.0" font-size="11" fill="#333" font-style="italic">CreateFile · ReadFile · WriteFile · DeviceIoControl</text>
+<rect x="10" y="180" width="900" height="95" rx="10" fill="#eef6e8"/>
+<text x="22" y="197" font-size="13" font-weight="bold" fill="#333">2  Windows NT 4.0 (Kern)</text>
+<rect x="20" y="205" width="150" height="60" rx="6" fill="#fff" stroke="#5b8a3c" stroke-width="1.2"/>
+<text x="95.0" y="223" text-anchor="middle" font-size="13" font-weight="bold">USER / win32k</text>
+<text x="95.0" y="239" text-anchor="middle" font-size="11">liest Tastatur, Maus</text>
+<rect x="180" y="205" width="160" height="60" rx="6" fill="#fff" stroke="#5b8a3c" stroke-width="1.2"/>
+<text x="260.0" y="223" text-anchor="middle" font-size="13" font-weight="bold">kbdclass · mouclass</text>
+<text x="260.0" y="239" text-anchor="middle" font-size="11">ConnectMultiplePorts=1</text>
+<rect x="350" y="205" width="150" height="60" rx="6" fill="#fff" stroke="#5b8a3c" stroke-width="1.2"/>
+<text x="425.0" y="223" text-anchor="middle" font-size="13" font-weight="bold">Dateisysteme</text>
+<text x="425.0" y="239" text-anchor="middle" font-size="11">FAT16 · NTFS → X:</text>
+<rect x="510" y="205" width="200" height="60" rx="6" fill="#fff" stroke="#5b8a3c" stroke-width="1.2"/>
+<text x="610.0" y="223" text-anchor="middle" font-size="13" font-weight="bold">E/A-Manager</text>
+<text x="610.0" y="239" text-anchor="middle" font-size="11">IRP_MJ_CREATE/READ/WRITE</text>
+<text x="610.0" y="253" text-anchor="middle" font-size="11">IRP_MJ_DEVICE_CONTROL</text>
+<rect x="720" y="205" width="180" height="60" rx="6" fill="#fff" stroke="#5b8a3c" stroke-width="1.2"/>
+<text x="810.0" y="223" text-anchor="middle" font-size="13" font-weight="bold">Registry</text>
+<text x="810.0" y="239" text-anchor="middle" font-size="11">Services\usbnt\Parameters</text>
+<text x="810.0" y="253" text-anchor="middle" font-size="11">DEVICEMAP\USB</text>
+<line x1="460" y1="277" x2="460" y2="303" stroke="#333" stroke-width="1.6" marker-end="url(#spitze)"/>
+<text x="470" y="294.0" font-size="11" fill="#333" font-style="italic">IRP  /  ClassService-Rückruf (Tastatur, Maus)</text>
+<rect x="10" y="305" width="900" height="150" rx="10" fill="#fdf3e3"/>
+<text x="22" y="322" font-size="13" font-weight="bold" fill="#333">3  usbnt.sys — obere Treiber   (quelle/ober)      je Schnittstelle genau einer</text>
+<rect x="20" y="330" width="124" height="112" rx="6" fill="#fff" stroke="#b07d2b" stroke-width="1.2"/>
+<text x="82.0" y="348" text-anchor="middle" font-size="13" font-weight="bold">Tastatur</text>
+<text x="82.0" y="364" text-anchor="middle" font-size="11">ntukbd · ntkbdport</text>
+<text x="82.0" y="378" text-anchor="middle" font-size="11">\Device\</text>
+<text x="82.0" y="392" text-anchor="middle" font-size="11">KeyboardPortN</text>
+<text x="82.0" y="406" text-anchor="middle" font-size="11">Wiederholung, LEDs</text>
+<rect x="147" y="330" width="124" height="112" rx="6" fill="#fff" stroke="#b07d2b" stroke-width="1.2"/>
+<text x="209.0" y="348" text-anchor="middle" font-size="13" font-weight="bold">Maus</text>
+<text x="209.0" y="364" text-anchor="middle" font-size="11">ntums · ntmaustasten</text>
+<text x="209.0" y="378" text-anchor="middle" font-size="11">\Device\</text>
+<text x="209.0" y="392" text-anchor="middle" font-size="11">PointerPortN</text>
+<text x="209.0" y="406" text-anchor="middle" font-size="11">Tasten 1–8, Rad</text>
+<rect x="274" y="330" width="124" height="112" rx="6" fill="#fff" stroke="#b07d2b" stroke-width="1.2"/>
+<text x="336.0" y="348" text-anchor="middle" font-size="13" font-weight="bold">Speicher</text>
+<text x="336.0" y="364" text-anchor="middle" font-size="11">ntumass</text>
+<text x="336.0" y="378" text-anchor="middle" font-size="11">\Device\</text>
+<text x="336.0" y="392" text-anchor="middle" font-size="11">UsbPlatteN</text>
+<text x="336.0" y="406" text-anchor="middle" font-size="11">+ Laufwerk X:</text>
+<rect x="401" y="330" width="124" height="112" rx="6" fill="#fff" stroke="#b07d2b" stroke-width="1.2"/>
+<text x="463.0" y="348" text-anchor="middle" font-size="13" font-weight="bold">Drucker</text>
+<text x="463.0" y="364" text-anchor="middle" font-size="11">ntuprn</text>
+<text x="463.0" y="378" text-anchor="middle" font-size="11">\Device\</text>
+<text x="463.0" y="392" text-anchor="middle" font-size="11">UsbDruckN</text>
+<text x="463.0" y="406" text-anchor="middle" font-size="11">= USBPRNn</text>
+<rect x="528" y="330" width="124" height="112" rx="6" fill="#fff" stroke="#b07d2b" stroke-width="1.2"/>
+<text x="590.0" y="348" text-anchor="middle" font-size="13" font-weight="bold">Gamepads</text>
+<text x="590.0" y="364" text-anchor="middle" font-size="11">ntujoy</text>
+<text x="590.0" y="378" text-anchor="middle" font-size="11">\Device\</text>
+<text x="590.0" y="392" text-anchor="middle" font-size="11">UsbJoyN</text>
+<text x="590.0" y="406" text-anchor="middle" font-size="11">HID, Xbox 360/One</text>
+<rect x="655" y="330" width="124" height="112" rx="6" fill="#fff" stroke="#b07d2b" stroke-width="1.2"/>
+<text x="717.0" y="348" text-anchor="middle" font-size="13" font-weight="bold">alles andere</text>
+<text x="717.0" y="364" text-anchor="middle" font-size="11">ntugen</text>
+<text x="717.0" y="378" text-anchor="middle" font-size="11">\Device\</text>
+<text x="717.0" y="392" text-anchor="middle" font-size="11">UsbDevN</text>
+<text x="717.0" y="406" text-anchor="middle" font-size="11">Steuer/Bulk/Int/Iso</text>
+<rect x="782" y="330" width="124" height="112" rx="6" fill="#fff" stroke="#b07d2b" stroke-width="1.2"/>
+<text x="844.0" y="348" text-anchor="middle" font-size="13" font-weight="bold">Steuergerät</text>
+<text x="844.0" y="364" text-anchor="middle" font-size="11">ntsteuer</text>
+<text x="844.0" y="378" text-anchor="middle" font-size="11">\\.\UsbNt</text>
+<text x="844.0" y="392" text-anchor="middle" font-size="11">Zähler, Spur,</text>
+<text x="844.0" y="406" text-anchor="middle" font-size="11">Maustasten</text>
+<line x1="460" y1="457" x2="460" y2="483" stroke="#333" stroke-width="1.6" marker-end="url(#spitze)"/>
+<text x="470" y="474.0" font-size="11" fill="#333" font-style="italic">usbd_transfer_setup / _start  ·  newbus probe / attach</text>
+<rect x="10" y="485" width="900" height="120" rx="10" fill="#f3e9f7"/>
+<text x="22" y="502" font-size="13" font-weight="bold" fill="#333">4  FreeBSD-USB-Stapel — unverändert   (freebsd/)</text>
+<rect x="20" y="510" width="420" height="85" rx="6" fill="#fff" stroke="#7d4a99" stroke-width="1.2"/>
+<text x="230.0" y="528" text-anchor="middle" font-size="13" font-weight="bold">USB-Kern</text>
+<text x="230.0" y="544" text-anchor="middle" font-size="11">usb_device · usb_hub · usb_transfer · usb_request</text>
+<text x="230.0" y="558" text-anchor="middle" font-size="11">usb_busdma · usb_process · usb_hid · hid.c (HID-Parser)</text>
+<text x="230.0" y="572" text-anchor="middle" font-size="11">Hub-Erkundung, Einrichtung, Zeitüberschreitung</text>
+<rect x="450" y="510" width="107" height="85" rx="6" fill="#fff" stroke="#7d4a99" stroke-width="1.2"/>
+<text x="503.5" y="528" text-anchor="middle" font-size="13" font-weight="bold">UHCI</text>
+<text x="503.5" y="544" text-anchor="middle" font-size="11">uhci.c</text>
+<text x="503.5" y="558" text-anchor="middle" font-size="11">USB 1.1</text>
+<rect x="563" y="510" width="107" height="85" rx="6" fill="#fff" stroke="#7d4a99" stroke-width="1.2"/>
+<text x="616.5" y="528" text-anchor="middle" font-size="13" font-weight="bold">OHCI</text>
+<text x="616.5" y="544" text-anchor="middle" font-size="11">ohci.c</text>
+<text x="616.5" y="558" text-anchor="middle" font-size="11">USB 1.1</text>
+<rect x="676" y="510" width="107" height="85" rx="6" fill="#fff" stroke="#7d4a99" stroke-width="1.2"/>
+<text x="729.5" y="528" text-anchor="middle" font-size="13" font-weight="bold">EHCI</text>
+<text x="729.5" y="544" text-anchor="middle" font-size="11">ehci.c</text>
+<text x="729.5" y="558" text-anchor="middle" font-size="11">USB 2.0</text>
+<rect x="789" y="510" width="107" height="85" rx="6" fill="#fff" stroke="#7d4a99" stroke-width="1.2"/>
+<text x="842.5" y="528" text-anchor="middle" font-size="13" font-weight="bold">xHCI</text>
+<text x="842.5" y="544" text-anchor="middle" font-size="11">xhci.c</text>
+<text x="842.5" y="558" text-anchor="middle" font-size="11">USB 2/3</text>
+<text x="842.5" y="572" text-anchor="middle" font-size="11">+ ntxhcisonder</text>
+<line x1="460" y1="607" x2="460" y2="633" stroke="#333" stroke-width="1.6" marker-end="url(#spitze)"/>
+<text x="470" y="624.0" font-size="11" fill="#333" font-style="italic">mtx · callout · bus_dma · bus_space · malloc · kthread</text>
+<rect x="10" y="635" width="900" height="150" rx="10" fill="#fbe9ea"/>
+<text x="22" y="652" font-size="13" font-weight="bold" fill="#333">5  Unterlage — FreeBSD-Grundfunktionen auf NT   (quelle/nt, quelle/sys)</text>
+<rect x="20" y="660" width="214" height="54" rx="6" fill="#fff" stroke="#b04a55" stroke-width="1.2"/>
+<text x="127.0" y="678" text-anchor="middle" font-size="12.5" font-weight="bold">mtx</text>
+<text x="127.0" y="694" text-anchor="middle" font-size="11">→ KMUTEX (nur PASSIVE)</text>
+<rect x="242" y="660" width="214" height="54" rx="6" fill="#fff" stroke="#b04a55" stroke-width="1.2"/>
+<text x="349.0" y="678" text-anchor="middle" font-size="12.5" font-weight="bold">ithread</text>
+<text x="349.0" y="694" text-anchor="middle" font-size="11">→ ISR → DPC → Systemfaden</text>
+<rect x="464" y="660" width="214" height="54" rx="6" fill="#fff" stroke="#b04a55" stroke-width="1.2"/>
+<text x="571.0" y="678" text-anchor="middle" font-size="12.5" font-weight="bold">callout</text>
+<text x="571.0" y="694" text-anchor="middle" font-size="11">→ KTIMER + KDPC</text>
+<rect x="686" y="660" width="214" height="54" rx="6" fill="#fff" stroke="#b04a55" stroke-width="1.2"/>
+<text x="793.0" y="678" text-anchor="middle" font-size="12.5" font-weight="bold">kthread</text>
+<text x="793.0" y="694" text-anchor="middle" font-size="11">→ PsCreateSystemThread</text>
+<rect x="20" y="720" width="214" height="54" rx="6" fill="#fff" stroke="#b04a55" stroke-width="1.2"/>
+<text x="127.0" y="738" text-anchor="middle" font-size="12.5" font-weight="bold">bus_dma</text>
+<text x="127.0" y="754" text-anchor="middle" font-size="11">→ HalAllocateCommonBuffer</text>
+<rect x="242" y="720" width="214" height="54" rx="6" fill="#fff" stroke="#b04a55" stroke-width="1.2"/>
+<text x="349.0" y="738" text-anchor="middle" font-size="12.5" font-weight="bold">PCI, BAR</text>
+<text x="349.0" y="754" text-anchor="middle" font-size="11">→ HalGetBusDataByOffset,</text>
+<text x="349.0" y="768" text-anchor="middle" font-size="11">MmMapIoSpace</text>
+<rect x="464" y="720" width="214" height="54" rx="6" fill="#fff" stroke="#b04a55" stroke-width="1.2"/>
+<text x="571.0" y="738" text-anchor="middle" font-size="12.5" font-weight="bold">malloc</text>
+<text x="571.0" y="754" text-anchor="middle" font-size="11">→ ExAllocatePoolWithTag</text>
+<text x="571.0" y="768" text-anchor="middle" font-size="11">+ Poolwache</text>
+<rect x="686" y="720" width="214" height="54" rx="6" fill="#fff" stroke="#b04a55" stroke-width="1.2"/>
+<text x="793.0" y="738" text-anchor="middle" font-size="12.5" font-weight="bold">newbus · sysctl</text>
+<text x="793.0" y="754" text-anchor="middle" font-size="11">→ Linker-Sektionen</text>
+<text x="793.0" y="768" text-anchor="middle" font-size="11">NTUDRV / NTUSYS</text>
+<line x1="460" y1="787" x2="460" y2="813" stroke="#333" stroke-width="1.6" marker-end="url(#spitze)"/>
+<rect x="10" y="815" width="900" height="60" rx="10" fill="#eeeeee"/>
+<text x="22" y="832" font-size="13" font-weight="bold" fill="#333">6  NT-Kern und HAL</text>
+<rect x="250" y="828" width="200" height="38" rx="6" fill="#fff" stroke="#666" stroke-width="1.2"/>
+<text x="350.0" y="846" text-anchor="middle" font-size="13" font-weight="bold">ntoskrnl / ntkrnlmp</text>
+<rect x="470" y="828" width="200" height="38" rx="6" fill="#fff" stroke="#666" stroke-width="1.2"/>
+<text x="570.0" y="846" text-anchor="middle" font-size="13" font-weight="bold">hal / halapic / halmps</text>
+<line x1="460" y1="877" x2="460" y2="903" stroke="#333" stroke-width="1.6" marker-end="url(#spitze)"/>
+<text x="470" y="894.0" font-size="11" fill="#333" font-style="italic">Register, DMA, Unterbrechung (INTx)</text>
+<rect x="10" y="905" width="900" height="95" rx="10" fill="#e9eef3"/>
+<text x="22" y="922" font-size="13" font-weight="bold" fill="#333">7  Hardware (PCI)</text>
+<rect x="20" y="925" width="170" height="60" rx="6" fill="#fff" stroke="#46637d" stroke-width="1.2"/>
+<text x="105.0" y="943" text-anchor="middle" font-size="13" font-weight="bold">UHCI</text>
+<text x="105.0" y="959" text-anchor="middle" font-size="11">Intel, VIA</text>
+<rect x="198" y="925" width="170" height="60" rx="6" fill="#fff" stroke="#46637d" stroke-width="1.2"/>
+<text x="283.0" y="943" text-anchor="middle" font-size="13" font-weight="bold">OHCI</text>
+<text x="283.0" y="959" text-anchor="middle" font-size="11">AMD SB7x0, NEC, SiS</text>
+<rect x="376" y="925" width="170" height="60" rx="6" fill="#fff" stroke="#46637d" stroke-width="1.2"/>
+<text x="461.0" y="943" text-anchor="middle" font-size="13" font-weight="bold">EHCI</text>
+<text x="461.0" y="959" text-anchor="middle" font-size="11">USB 2.0</text>
+<rect x="554" y="925" width="170" height="60" rx="6" fill="#fff" stroke="#46637d" stroke-width="1.2"/>
+<text x="639.0" y="943" text-anchor="middle" font-size="13" font-weight="bold">xHCI</text>
+<text x="639.0" y="959" text-anchor="middle" font-size="11">NEC µPD720200, Intel</text>
+<rect x="732" y="925" width="170" height="60" rx="6" fill="#fff" stroke="#46637d" stroke-width="1.2"/>
+<text x="817.0" y="943" text-anchor="middle" font-size="13" font-weight="bold">USB-Geräte</text>
+<text x="817.0" y="959" text-anchor="middle" font-size="11">Low/Full/High/Super</text>
+<rect x="925" y="45" width="345" height="395" rx="6" fill="#fffbe6" stroke="#a08a2a" stroke-width="1.2"/>
+<text x="1097.5" y="63" text-anchor="middle" font-size="13" font-weight="bold">Wie ein Gerät seinen Treiber findet</text>
+<text x="937" y="85" font-size="11" xml:space="preserve" font-family="Consolas, Courier New, monospace">Das Gerät meldet VID:PID und je</text>
+<text x="937" y="100" font-size="11" xml:space="preserve" font-family="Consolas, Courier New, monospace">Schnittstelle ein Klassen-Tripel</text>
+<text x="937" y="115" font-size="11" xml:space="preserve" font-family="Consolas, Courier New, monospace">(Klasse / Unterklasse / Protokoll).</text>
+<text x="937" y="130" font-size="11" xml:space="preserve" font-family="Consolas, Courier New, monospace">Jede Schnittstelle wird allen oberen</text>
+<text x="937" y="145" font-size="11" xml:space="preserve" font-family="Consolas, Courier New, monospace">Treibern angeboten (newbus probe):</text>
+<text x="937" y="160" font-size="11" xml:space="preserve" font-family="Consolas, Courier New, monospace"></text>
+<text x="937" y="175" font-size="11" xml:space="preserve" font-family="Consolas, Courier New, monospace">03 HID Boot/Bericht  → Tastatur, Maus</text>
+<text x="937" y="190" font-size="11" xml:space="preserve" font-family="Consolas, Courier New, monospace">03 HID Gamepad       → Gamepad</text>
+<text x="937" y="205" font-size="11" xml:space="preserve" font-family="Consolas, Courier New, monospace">FF/5D/01, FF/47/D0   → Xbox 360 / One</text>
+<text x="937" y="220" font-size="11" xml:space="preserve" font-family="Consolas, Courier New, monospace">08/06,05,02/50       → Speicher</text>
+<text x="937" y="235" font-size="11" xml:space="preserve" font-family="Consolas, Courier New, monospace">07/01/01 oder 02     → Drucker</text>
+<text x="937" y="250" font-size="11" xml:space="preserve" font-family="Consolas, Courier New, monospace">alles andere         → ntugen (UsbDevN)</text>
+<text x="937" y="265" font-size="11" xml:space="preserve" font-family="Consolas, Courier New, monospace"></text>
+<text x="937" y="280" font-size="11" xml:space="preserve" font-family="Consolas, Courier New, monospace">ntugen hat die niedrigste Güte</text>
+<text x="937" y="295" font-size="11" xml:space="preserve" font-family="Consolas, Courier New, monospace">(BUS_PROBE_HOOVER): es bekommt nur, was</text>
+<text x="937" y="310" font-size="11" xml:space="preserve" font-family="Consolas, Courier New, monospace">sonst keiner nimmt — nichts geht verloren.</text>
+<text x="937" y="325" font-size="11" xml:space="preserve" font-family="Consolas, Courier New, monospace"></text>
+<text x="937" y="340" font-size="11" xml:space="preserve" font-family="Consolas, Courier New, monospace">HKLM\HARDWARE\DEVICEMAP\USB:</text>
+<text x="937" y="355" font-size="11" xml:space="preserve" font-family="Consolas, Courier New, monospace">  UsbDev0 = VID_0627&amp;PID_0001&amp;MI_00 03/00/00</text>
+<text x="937" y="370" font-size="11" xml:space="preserve" font-family="Consolas, Courier New, monospace"></text>
+<text x="937" y="385" font-size="11" xml:space="preserve" font-family="Consolas, Courier New, monospace">Neue Geräteart: Programm gegen UsbDevN</text>
+<text x="937" y="400" font-size="11" xml:space="preserve" font-family="Consolas, Courier New, monospace">(ntusbgen.h) oder oberer Treiber mit</text>
+<text x="937" y="415" font-size="11" xml:space="preserve" font-family="Consolas, Courier New, monospace">probe auf Klasse oder VID:PID.</text>
+<rect x="925" y="455" width="345" height="330" rx="6" fill="#f0f7ff" stroke="#4a78a8" stroke-width="1.2"/>
+<text x="1097.5" y="473" text-anchor="middle" font-size="13" font-weight="bold">Unterbrechungsweg (nt/ntintr.c)</text>
+<text x="937" y="495" font-size="11" xml:space="preserve" font-family="Consolas, Courier New, monospace">FreeBSDs Handler ist ein ithread: er</text>
+<text x="937" y="510" font-size="11" xml:space="preserve" font-family="Consolas, Courier New, monospace">nimmt Mutexe und wartet. Auf DIRQL</text>
+<text x="937" y="525" font-size="11" xml:space="preserve" font-family="Consolas, Courier New, monospace">wäre das ein Bluescreen. Deshalb:</text>
+<text x="937" y="540" font-size="11" xml:space="preserve" font-family="Consolas, Courier New, monospace"></text>
+<text x="937" y="555" font-size="11" xml:space="preserve" font-family="Consolas, Courier New, monospace">ntu_isr          DIRQL</text>
+<text x="937" y="570" font-size="11" xml:space="preserve" font-family="Consolas, Courier New, monospace">  unser Baustein? Quelle abstellen,</text>
+<text x="937" y="585" font-size="11" xml:space="preserve" font-family="Consolas, Courier New, monospace">  DPC einreihen — sonst nichts</text>
+<text x="937" y="600" font-size="11" xml:space="preserve" font-family="Consolas, Courier New, monospace">ntu_dpc          DISPATCH_LEVEL</text>
+<text x="937" y="615" font-size="11" xml:space="preserve" font-family="Consolas, Courier New, monospace">  Ereignis setzen</text>
+<text x="937" y="630" font-size="11" xml:space="preserve" font-family="Consolas, Courier New, monospace">ntu_ithread_body PASSIVE_LEVEL</text>
+<text x="937" y="645" font-size="11" xml:space="preserve" font-family="Consolas, Courier New, monospace">  FreeBSD-Handler rufen,</text>
+<text x="937" y="660" font-size="11" xml:space="preserve" font-family="Consolas, Courier New, monospace">  Quelle wieder freigeben</text>
+<text x="937" y="675" font-size="11" xml:space="preserve" font-family="Consolas, Courier New, monospace"></text>
+<text x="937" y="690" font-size="11" xml:space="preserve" font-family="Consolas, Courier New, monospace">Die PCI-Leitung ist pegelgesteuert:</text>
+<text x="937" y="705" font-size="11" xml:space="preserve" font-family="Consolas, Courier New, monospace">ohne Abstellen im ISR käme sofort die</text>
+<text x="937" y="720" font-size="11" xml:space="preserve" font-family="Consolas, Courier New, monospace">nächste — ein Sturm wie ein Hänger.</text>
+<text x="937" y="735" font-size="11" xml:space="preserve" font-family="Consolas, Courier New, monospace"></text>
+<text x="937" y="750" font-size="11" xml:space="preserve" font-family="Consolas, Courier New, monospace">Herzschlag: unt = faden, verl 0</text>
+<rect x="925" y="800" width="345" height="200" rx="6" fill="#f4f4f4" stroke="#666" stroke-width="1.2"/>
+<text x="1097.5" y="818" text-anchor="middle" font-size="13" font-weight="bold">Bauformen</text>
+<text x="937" y="840" font-size="11" xml:space="preserve" font-family="Consolas, Courier New, monospace">usbnt.sys   alle vier Bauarten (empf.)</text>
+<text x="937" y="855" font-size="11" xml:space="preserve" font-family="Consolas, Courier New, monospace">uhcint.sys  nur UHCI</text>
+<text x="937" y="870" font-size="11" xml:space="preserve" font-family="Consolas, Courier New, monospace">ohcint.sys  nur OHCI</text>
+<text x="937" y="885" font-size="11" xml:space="preserve" font-family="Consolas, Courier New, monospace">ehcint.sys  nur EHCI</text>
+<text x="937" y="900" font-size="11" xml:space="preserve" font-family="Consolas, Courier New, monospace">xhcint.sys  nur xHCI</text>
+<text x="937" y="915" font-size="11" xml:space="preserve" font-family="Consolas, Courier New, monospace"></text>
+<text x="937" y="930" font-size="11" xml:space="preserve" font-family="Consolas, Courier New, monospace">Diagnose:   Eingabe-Protokoll auf COM1</text>
+<text x="937" y="945" font-size="11" xml:space="preserve" font-family="Consolas, Courier New, monospace">Herzschlag: alle 5 s Zähler, Hänger</text>
+</svg>

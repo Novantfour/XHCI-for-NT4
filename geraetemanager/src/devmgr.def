@@ -1,0 +1,3 @@
+LIBRARY DEVMGR
+EXPORTS
+    CPlApplet=CPlApplet@16

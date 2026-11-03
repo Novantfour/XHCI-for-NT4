@@ -1,0 +1,3 @@
+/* Symbol fuer den grafischen Installer.  Die Versionsangaben erzeugt
+   bau-werkzeuge.sh fuer alle Dateien einheitlich (ver ...). */
+1 ICON "usbsetup.ico"

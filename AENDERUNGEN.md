@@ -1794,7 +1794,7 @@ usbton: "wmlaut [PROZENT]" setzt/liest die waveOut-Lautstaerke.
 
 ## Fassung 2026.10.10.4 bis .6 -- an der ECHTEN Maschine gemessen
 
-Ueber die GitHub-Fernsteuerung (crc_agent auf echtem NT 4.0, 192.168.1.114)
+Ueber die GitHub-Fernsteuerung (crc_agent auf echtem NT 4.0)
 liess sich erstmals am echten HyperX messen statt am Emulat.  Dabei kam
 heraus, dass mehrere Dinge gleichzeitig falsch waren.
 
@@ -1841,3 +1841,79 @@ Prozesse erfahren Aenderungen nur ueber den Waechterfaden (Pollen).
 fernsteuerung/sende_datei.py: grosse Dateien stueckweise zur NT-Maschine
 (PUT ueberschreibt und vertraegt nur 1400 Zeichen je Zeile -> Stuecke +
 copy /b; >90 Stuecke werden auf mehrere Auftraege verteilt).
+
+## Fassung 2026.10.11.4 (nachgetragen): Nachlauf, INF, HID
+
+Diese drei Dinge waren gebaut und ausgeliefert, standen aber nicht hier.
+- Nachlauf im Audiotreiber: nach dem letzten Klang sendet der Strom noch
+  rund zwei Sekunden Stille (sc_leerlauf), statt sofort aufzuhoeren.  Ein
+  Funk-Headset braucht nach dem Anlaufen Zeit; der Anfang kurzer Klaenge
+  ging sonst verloren.  STOP/CLEANUP entfernen nur noch den Klienten, der
+  Rueckruf beendet den Strom selbst.  Gemessen: Mitschnitt nach ding.wav
+  2,54 s statt 0,54 s, Ton vollstaendig bis 0,524 s.
+- INF-Dateien fuer die drei Pakete -- in dieser Fassung FEHLERHAFT, siehe
+  unten.
+- HID fuer NT 4.0: quelle/werkzeug/hiddll.c (HID.DLL, alle 21 Funktionen,
+  die DirectInput laedt, aufgesetzt auf \\.\UsbGenN) und hidtest.c.
+
+## Fassung 2026.11.11.1: Durchsicht auf Vollstaendigkeit und Fehler
+
+Anlass: der Baum wurde nach GitHub gesichert und danach als Ganzes
+geprueft.  Gefunden und behoben:
+
+INF-Dateien (ausgeliefert, FEHLERHAFT -- nicht die aus 2026.10.11.4 nehmen):
+- USBXBOX.INF trug den Dienst unter "usbaudio" mit usbaudio.sys ein
+  (Textersetzung hatte nur Grossbuchstaben erfasst): kein Xbox-Treiber,
+  verfaelschter Audio-Eintrag.  Joystick-Eintrag frei erfunden.
+- USBAUDIO.INF: Start "manuell" und ErrorControl 1 statt Systemstart und 0.
+- USBNT.INF: Gruppe "Extended base" statt "Keyboard Port"; es fehlten
+  Parameters\Ausgabe und ConnectMultiplePorts fuer Kbdclass/Mouclass
+  (ohne die arbeiten USB-Tastatur/-Maus nicht neben PS/2); Reste der
+  Audio-Vorlage im Kopf.
+  Ursache: Werte angenommen statt aus audioinst.c/xboxinst.c/usbinst.c
+  abgelesen.  Alle drei von Hand neu geschrieben, Werte aus den Quellen;
+  USBAUDIO.INF legt jetzt auch die Merkposten unter SOFTWARE\UsbNt\Audio
+  an, damit "AUDIOINST aus" eine INF-Einrichtung entfernt.  Jede INF sagt
+  im Kopf, was sie NICHT tut (suchen, sichern, pruefen).
+  NICHT auf einer NT-4.0-Maschine erprobt.
+
+Bau:
+- quelle/werkzeug/res/werkzeug.ico und manifest.xml fehlten im Projekt
+  (lagen nur im Arbeitsbereich).  windres scheiterte deshalb still, und
+  14 Programme -- darunter USBINST, AUDIOINST, XBOXINST, USBTON -- wurden
+  OHNE Versionsangabe gebaut und ausgeliefert.  Beide Dateien aus
+  bin/programme/usbtest.exe zurueckgewonnen.
+- HID.DLL, HIDTEST.EXE und DIPROBE.EXE standen in keinem Bauskript; jetzt
+  in bau-werkzeuge.sh.  hidtest.c auf ntbasis.c umgestellt (zog msvcrt).
+- pruefe-bau.py (neu): Abschnitte, PE-Pruefsumme, Versionsangabe,
+  NT-4.0-fremde Importe, msvcrt.  Nach jedem Bau laufen lassen.
+
+Audiotreiber (quelle/ober/ntuaudio.c):
+- sc_leerlauf wurde beim Start nicht zurueckgesetzt.  Nach abgelaufenem
+  Nachlauf stand er am Anschlag; der Rueckruf konnte den frisch
+  gestarteten Strom sofort wieder beenden, wenn er lief, bevor der neue
+  Klient als spielend eingetragen war (Wettlauf) -- der Klang bliebe
+  stumm.  Im Pruefstand zufaellig nie aufgetreten.
+- Ein laufender Strom hat EINE Rate.  START mit anderer Rate oder
+  Abtastgroesse wird jetzt mit STATUS_DEVICE_BUSY abgewiesen.
+- teil auf die Groesse von sc_mix/sc_mixaus begrenzt.
+- ntua_detach gibt die Ringe aller Klienten frei (Leck beim Abziehen
+  waehrend der Wiedergabe).
+
+usbaudio.dll (quelle/werkzeug/usbaudio.c):
+- Jede Oeffnung nahm die Rate ihres Programms, wenn das Geraet sie
+  konnte.  Seit dem Mischer falsch: 44,1-kHz-Musik plus Systemklang, der
+  auf 48 kHz umgerechnet wird, im selben Strom -- rund 8 % verstimmt.
+  Jetzt immer die beim Auflisten ermittelte Geraeterate (rate48).
+- Der Waechterfaden endete nie (g_waechter_aus wurde nirgends gesetzt).
+  Jetzt waechter_beenden() beim letzten MXDM_CLOSE und bei DRV_FREE.
+
+Stand der Binaerdateien -- WICHTIG:
+- bin/treiber, bin/programme und alle installer-* enthalten weiter die
+  Fassung 2026.10.11.4, die an der echten Maschine laeuft.  Geaendert
+  wurden dort NUR die INF-Dateien.
+- bin/ungeprueft-2026.11.11.1/ enthaelt den Neubau aus dem heutigen
+  Quellstand: 7 Treiber, 25 Programme, pruefe-bau.py ohne Maengel.
+  Gebaut und statisch geprueft, aber NICHT gelaufen -- weder im Pruefstand
+  (mit dem Arbeitsbereich verloren) noch an der echten Maschine.  Erst
+  nach einem Lauf in die Installer uebernehmen.

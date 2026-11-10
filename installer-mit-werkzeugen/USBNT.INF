@@ -1,48 +1,56 @@
-; USBNT.INF -- FreeBSD-USB fuer NT 4.0 fuer Windows NT 4.0
+; USBNT.INF -- FreeBSD-USB (Grundtreiber, alle vier Controllerarten) fuer Windows NT 4.0
 ;
 ; Einrichten:  Rechtsklick auf diese Datei -> Installieren
 ;      oder:   rundll32 setupapi,InstallHinfSection DefaultInstall 132 .\USBNT.INF
-;
 ; Danach neu starten.
 ;
-; HINWEIS: USBINST.EXE ist der bessere Weg -- es waehlt die Bauart des
-; USB-Controllers (UHCI/OHCI/EHCI/xHCI) und richtet den Geraetemanager
-; mit ein.  Diese INF richtet nur den Kerntreiber ein.
+; USBINST.EXE BLEIBT DER BESSERE WEG.
+; Es PRUEFT vorher auf fremde Maus-, Tastatur- und USB-Treiber, die sich
+; mit diesem Stapel nicht vertragen, kann eine einzelne Controllerart
+; waehlen (UHCINT/OHCINT/EHCINT/XHCINT), sichert die geaenderten Werte
+; fuer "USBINST aus" und richtet Geraetemanager und Werkzeuge mit ein.
+; Diese INF tut davon NICHTS: sie richtet nur usbnt.sys (alle vier
+; Controllerarten in einer Datei) ein und setzt die beiden Klassenwerte.
+; Die alten Klassenwerte werden NICHT gesichert.  Auf einem Rechner mit
+; einem anderen USB-Stapel oder Maus-Filtertreibern bitte USBINST.EXE.
 ;
-; (frueherer Hinweis bezog sich auf die Soundkarte
-; im Rechner steckt.  Es sucht den ersten freien winmm-Namen (wave, sonst
-; wave1..wave9 und mixer, sonst mixer1..9) und laesst die vorhandene Karte
-; in Ruhe.  Diese INF traegt fest "wave1" und "mixer1" ein -- richtig fuer
-; den Fall MIT vorhandener Soundkarte.  Ist USB-Audio das EINZIGE Geraet,
-; bitte AUDIOINST.EXE benutzen oder unten wave1/mixer1 in wave/mixer
-; aendern.
-;
-; Entfernen: ENTFERNE.BAT  (oder AUDIOINST.EXE aus)
+; Die Werte unten sind aus der Quelle von USBINST.EXE abgelesen
+; (quelle/werkzeug/usbinst.c), nicht geschaetzt.  Aendert sich
+; dort etwas, muss diese Datei nachgezogen werden.
 
 [Version]
 Signature  = "$Windows NT$"
-Class      = MEDIA
 Provider   = %Hersteller%
 
 [DefaultInstall]
-CopyFiles  = Dateien.Sys
-AddReg     = Reg.Dienst
+CopyFiles  = Dateien.Treiber
+AddReg     = Reg.Dienst, Reg.Klassen
 
 [DestinationDirs]
-Dateien.Sys = 12                ; %SystemRoot%\system32\drivers
+Dateien.Treiber = 12            ; %SystemRoot%\system32\drivers
 
-[Dateien.Sys]
+[Dateien.Treiber]
 USBNT.SYS
 
-; ---- Kerntreiber als Dienst -------------------------------------------
-; Start 1 = beim Systemstart (der USB-Stapel muss frueh da sein).
+; Dienst wie CreateService in usbinst.c (dienst_einrichten):
+;   Kerntreiber (1), Start mit dem System (1), Fehler normal (1),
+;   Gruppe "Keyboard Port" -- der Stapel bringt Tastatur und Maus und muss
+;   vor den Klassentreibern da sein.  Anzeigename wie dort je Bauart.
+;   Parameters\Ausgabe = 0: kein Bericht auf die serielle Schnittstelle.
 [Reg.Dienst]
 HKLM,"SYSTEM\CurrentControlSet\Services\usbnt","Type",0x00010001,1
 HKLM,"SYSTEM\CurrentControlSet\Services\usbnt","Start",0x00010001,1
 HKLM,"SYSTEM\CurrentControlSet\Services\usbnt","ErrorControl",0x00010001,1
-HKLM,"SYSTEM\CurrentControlSet\Services\usbnt","Group",0x00000000,"Extended base"
-HKLM,"SYSTEM\CurrentControlSet\Services\usbnt","ImagePath",0x00000000,"System32\DRIVERS\usbnt.sys"
-HKLM,"SYSTEM\CurrentControlSet\Services\usbnt","DisplayName",0x00000000,"FreeBSD-USB fuer NT 4.0"
+HKLM,"SYSTEM\CurrentControlSet\Services\usbnt","Group",0x00000000,"Keyboard Port"
+HKLM,"SYSTEM\CurrentControlSet\Services\usbnt","ImagePath",0x00020000,"System32\drivers\usbnt.sys"
+HKLM,"SYSTEM\CurrentControlSet\Services\usbnt","DisplayName",0x00000000,"FreeBSD-USB fuer NT 4.0 (usbnt)"
+HKLM,"SYSTEM\CurrentControlSet\Services\usbnt\Parameters","Ausgabe",0x00010001,0
+
+; Ohne das arbeiten USB-Tastatur und -Maus nicht NEBEN den PS/2-Geraeten:
+; die Klassentreiber verbinden sich sonst nur mit einem Anschluss.
+[Reg.Klassen]
+HKLM,"SYSTEM\CurrentControlSet\Services\Kbdclass\Parameters","ConnectMultiplePorts",0x00010001,1
+HKLM,"SYSTEM\CurrentControlSet\Services\Mouclass\Parameters","ConnectMultiplePorts",0x00010001,1
 
 [SourceDisksNames]
 1 = %Datentraeger%,,
@@ -50,7 +58,6 @@ HKLM,"SYSTEM\CurrentControlSet\Services\usbnt","DisplayName",0x00000000,"FreeBSD
 [SourceDisksFiles]
 USBNT.SYS = 1
 
-
 [Strings]
 Hersteller   = "FreeBSD-USB auf NT 4.0"
-Datentraeger = "USB-Audio fuer NT 4.0"
+Datentraeger = "FreeBSD-USB fuer NT 4.0"

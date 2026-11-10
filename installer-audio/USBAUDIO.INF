@@ -2,61 +2,65 @@
 ;
 ; Einrichten:  Rechtsklick auf diese Datei -> Installieren
 ;      oder:   rundll32 setupapi,InstallHinfSection DefaultInstall 132 .\USBAUDIO.INF
-;
 ; Danach neu starten.
 ;
-; HINWEIS: AUDIOINST.EXE ist der bessere Weg, wenn schon eine Soundkarte
-; im Rechner steckt.  Es sucht den ersten freien winmm-Namen (wave, sonst
-; wave1..wave9 und mixer, sonst mixer1..9) und laesst die vorhandene Karte
-; in Ruhe.  Diese INF traegt fest "wave1" und "mixer1" ein -- richtig fuer
-; den Fall MIT vorhandener Soundkarte.  Ist USB-Audio das EINZIGE Geraet,
-; bitte AUDIOINST.EXE benutzen oder unten wave1/mixer1 in wave/mixer
-; aendern.
+; AUDIOINST.EXE BLEIBT DER BESSERE WEG.
+; Es prueft, ob usbnt.sys alle Funktionen fuer den Audiotreiber liefert,
+; sucht den ersten FREIEN winmm-Namen (wave, sonst wave1..wave9; mixer,
+; sonst mixer1..9) und merkt sich seine Eintraege, damit "AUDIOINST aus"
+; sie wieder entfernt.  Eine INF kann nicht suchen: sie traegt fest
+; "wave1" und "mixer1" ein.  Das ist richtig, wenn schon eine Soundkarte
+; im Rechner steckt (sie belegt "wave" und "mixer").  Sind wave1 oder
+; mixer1 bereits von einem ANDEREN Treiber belegt, wuerde diese INF ihn
+; ueberschreiben -- dann unbedingt AUDIOINST.EXE nehmen.
+; Voraussetzung: das USB-Paket (usbnt.sys) ist schon eingerichtet.
 ;
-; Entfernen: ENTFERNE.BAT  (oder AUDIOINST.EXE aus)
+; Die Werte unten sind aus der Quelle von AUDIOINST.EXE abgelesen
+; (quelle/werkzeug/audioinst.c), nicht geschaetzt.  Aendert sich
+; dort etwas, muss diese Datei nachgezogen werden.
 
 [Version]
 Signature  = "$Windows NT$"
-Class      = MEDIA
 Provider   = %Hersteller%
 
 [DefaultInstall]
-CopyFiles  = Dateien.Sys, Dateien.Dll, Dateien.Exe
-AddReg     = Reg.Dienst, Reg.Drivers32
+CopyFiles  = Dateien.Treiber, Dateien.System
+AddReg     = Reg.Dienst, Reg.Winmm, Reg.Merken
 
 [DestinationDirs]
-Dateien.Sys = 12                ; %SystemRoot%\system32\drivers
-Dateien.Dll = 11                ; %SystemRoot%\system32
-Dateien.Exe = 11
+Dateien.Treiber = 12            ; %SystemRoot%\system32\drivers
+Dateien.System  = 11            ; %SystemRoot%\system32
 
-[Dateien.Sys]
+[Dateien.Treiber]
 USBAUDIO.SYS
 
-[Dateien.Dll]
+[Dateien.System]
 USBAUDIO.DLL
-
-[Dateien.Exe]
 USBTON.EXE
 
-; ---- Kerntreiber als Dienst -------------------------------------------
-; Start 3 = manuell; USBINST/der USB-Stapel laedt ihn beim Anstecken.
-; Group "Extended base" laeuft nach dem USB-Grundtreiber an.
+; Dienst wie CreateService in audioinst.c:
+;   Kerntreiber (1), Start mit dem System (1), Fehler ignorieren (0) --
+;   ein fehlender Audiotreiber soll den Start nicht stoeren --,
+;   Gruppe "Extended Base".
 [Reg.Dienst]
 HKLM,"SYSTEM\CurrentControlSet\Services\usbaudio","Type",0x00010001,1
-HKLM,"SYSTEM\CurrentControlSet\Services\usbaudio","Start",0x00010001,3
-HKLM,"SYSTEM\CurrentControlSet\Services\usbaudio","ErrorControl",0x00010001,1
-HKLM,"SYSTEM\CurrentControlSet\Services\usbaudio","Group",0x00000000,"Extended base"
-HKLM,"SYSTEM\CurrentControlSet\Services\usbaudio","ImagePath",0x00000000,"System32\DRIVERS\usbaudio.sys"
+HKLM,"SYSTEM\CurrentControlSet\Services\usbaudio","Start",0x00010001,1
+HKLM,"SYSTEM\CurrentControlSet\Services\usbaudio","ErrorControl",0x00010001,0
+HKLM,"SYSTEM\CurrentControlSet\Services\usbaudio","Group",0x00000000,"Extended Base"
+HKLM,"SYSTEM\CurrentControlSet\Services\usbaudio","ImagePath",0x00020000,"System32\drivers\usbaudio.sys"
 HKLM,"SYSTEM\CurrentControlSet\Services\usbaudio","DisplayName",0x00000000,"USB-Audio (UAC1)"
 
-; ---- winmm: Wave-Treiber und Mixer ------------------------------------
 ; winmm laedt Mixer-Treiber NUR ueber einen eigenen mixer-Eintrag, nicht
-; ueber den wave-Eintrag -- beide sind noetig (sonst keine
-; Lautstaerkeregelung).
-[Reg.Drivers32]
+; ueber den wave-Eintrag -- beide sind noetig.
+[Reg.Winmm]
 HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Drivers32","wave1",0x00000000,"usbaudio.dll"
 HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Drivers32","mixer1",0x00000000,"usbaudio.dll"
-HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Drivers.desc","usbaudio.dll",0x00000000,"USB-Audio (UAC1)"
+
+; Dieselben Merkposten, die AUDIOINST anlegt -- damit "AUDIOINST aus"
+; (ENTFERNE.BAT) auch eine per INF eingerichtete Fassung sauber entfernt.
+[Reg.Merken]
+HKLM,"SOFTWARE\UsbNt\Audio","Drivers32_Name",0x00000000,"wave1"
+HKLM,"SOFTWARE\UsbNt\Audio","Drivers32_Mixer",0x00000000,"mixer1"
 
 [SourceDisksNames]
 1 = %Datentraeger%,,

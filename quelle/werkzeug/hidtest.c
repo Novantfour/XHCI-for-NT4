@@ -16,7 +16,7 @@
  */
 
 #include <windows.h>
-#include <stdio.h>
+#include "ntbasis.h"
 
 /* ---- aus HID.DLL (Originalnamen) ---------------------------------- */
 typedef LONG NTSTATUS_HID;
@@ -200,10 +200,10 @@ static void zeige(int nr)
     printf("  Pfad        %s\n", pfad);
     printf("  Kennung     %04X:%04X, Ausgabe %04X\n", a.VendorID, a.ProductID, a.VersionNumber);
     if (pHerst && pHerst(h, w, sizeof(w))) {
-        printf("  Hersteller  "); for (k = 0; w[k]; k += 1) putchar((char)w[k]); printf("\n");
+        printf("  Hersteller  "); for (k = 0; w[k]; k += 1) printf("%c", (char)w[k]); printf("\n");
     }
     if (pProd && pProd(h, w, sizeof(w))) {
-        printf("  Produkt     "); for (k = 0; w[k]; k += 1) putchar((char)w[k]); printf("\n");
+        printf("  Produkt     "); for (k = 0; w[k]; k += 1) printf("%c", (char)w[k]); printf("\n");
     }
     printf("  Art         %s (Seite %04X, Nutzung %04X)\n",
            art(c.UsagePage, c.Usage), c.UsagePage, c.Usage);

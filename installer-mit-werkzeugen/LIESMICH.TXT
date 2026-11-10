@@ -99,8 +99,9 @@ Betrifft USBNT/UHCINT/OHCINT/EHCINT/XHCINT und PCISCAN (Geraete-
 manager).  Geprueft in NT 4.0 SP6a: Controller, Tastatur, Maus und
 Massenspeicher arbeiten unveraendert.
 
-USBNT.INF -- Einrichten per INF
+USBNT.INF -- Einrichten per INF (berichtigt 2026.11.11)
   Rechtsklick auf USBNT.INF -> Installieren, danach neu starten.
-  Die mitgelieferte EXE ist der bessere Weg (sie prueft Vorhandenes
-  und waehlt freie Eintraege); die INF ist fuer alle, die den
-  Windows-eigenen Weg bevorzugen.
+  USBINST.EXE bleibt der bessere Weg: es prueft, sichert und sucht freie
+  Eintraege; die INF traegt feste Werte ein.  Was sie NICHT tut, steht
+  in ihrem Kopf.  Die INF aus Fassung 2026.10.11.4 war fehlerhaft --
+  nicht benutzen.  Diese Fassung ist noch nicht auf NT 4.0 erprobt.

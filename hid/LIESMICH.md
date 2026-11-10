@@ -10,10 +10,12 @@ Treiber ist nicht nötig: unser USB-Stapel kann schon alles und bietet es
 
 ## Stand
 
-| Datei | Stand |
-|---|---|
-| `hiddll.c` → `HID.DLL` | **gebaut**, 17 KB, nur kernel32 + user32, **alle 21 von DirectInput geladenen Funktionen** |
-| `hidtest.c` → `HIDTEST.EXE` | baut, zieht aber noch msvcrt herein — auf `ntbasis.c` umstellen (ohne C-Laufzeit, wie die übrigen Werkzeuge) |
+Die Quellen liegen in `quelle/werkzeug/` (`hiddll.c`, `hid.def`,
+`hidtest.c`) und werden von `bau-werkzeuge.sh` mitgebaut -- hier liegt
+bewusst keine zweite Kopie.  Gebaute Dateien:
+`bin/ungeprueft-2026.11.11.1/programme/hid.dll` und `hidtest.exe`
+(beide ohne C-Laufzeit, mit Versionsangabe).  **Noch nicht auf NT 4.0
+gelaufen.**
 
 ## Was HID.DLL bietet
 
@@ -74,9 +76,8 @@ DirectInput nehmen würde. Scheitert etwas hier, scheitert es dort genauso.
 
 ## Noch zu tun
 
-1. `hidtest.c` ohne C-Laufzeit bauen (`ntbasis.c`, wie `usbton` und die
-   anderen Werkzeuge) — sonst fehlen auf NT 4.0 einzelne msvcrt-Funktionen.
-2. In `bau-werkzeuge.sh` aufnehmen.
+1. ~~`hidtest.c` ohne C-Laufzeit bauen~~ — erledigt (2026.11.11).
+2. ~~In `bau-werkzeuge.sh` aufnehmen~~ — erledigt.
 3. Am echten Headset prüfen: Schnittstelle 3 (HID, Endpunkt 0x83) muss
    auftauchen, und `hidtest N lesen` muss beim Drehen am Lautstärkerad
    Berichte zeigen. Damit wäre belegt, wo das Rad meldet.

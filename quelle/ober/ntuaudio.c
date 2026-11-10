@@ -217,6 +217,7 @@ ntua_rueckruf (struct usb_xfer *xfer, usb_error_t error)
                     if (beitrag > teil) teil = beitrag;
                 }
 
+                if (teil > anz * 2) teil = anz * 2;  /* nie ueber sc_mix/sc_mixaus hinaus */
                 if (!erster && teil != 0) {
                     uint8_t *aus = sc->sc_mixaus;
                     for (si = 0; si < teil / 2 && si < anz; si += 1) {
@@ -457,6 +458,12 @@ ntua_starten (struct ntua_softc *sc, const NTUA_START *s)
     sc->sc_unterlaeufe = sc->sc_rahmen = sc->sc_fehler = 0;
     sc->sc_ueberlaeufe = 0;
     sc->sc_daten_da = 0;
+    /*  Nachlaufzaehler auf null.  Nach einem abgelaufenen Nachlauf steht
+     *  er am Anschlag; ohne das Zuruecksetzen beendete der Rueckruf den
+     *  frisch gestarteten Strom sofort wieder, wenn er lief, bevor der
+     *  neue Klient als "spielt" eingetragen war (Wettlauf zwischen
+     *  usbd_transfer_start und k_laeuft = 1 im START-Zweig).  */
+    sc->sc_leerlauf = 0;
     sc->sc_laeuft = 1;
     usbd_transfer_start(sc->sc_xfer[0]);
     usbd_transfer_start(sc->sc_xfer[1]);
@@ -765,6 +772,15 @@ ntua_ioctl (PDEVICE_OBJECT dev, PIRP irp)
             } else {
                 int lief = sc->sc_laeuft;
                 err = 0;
+                /*  Der Strom hat EINE Rate.  Kaeme ein zweiter Klient mit
+                 *  einer anderen, wuerde sein Ton zu schnell oder zu
+                 *  langsam gemischt (44,1 gegen 48 kHz: rund 8 %).  Die
+                 *  DLL nimmt deshalb immer dieselbe Geraeterate; wer
+                 *  trotzdem abweicht, wird abgewiesen statt verstimmt.  */
+                if (lief && (s.Rate != sc->sc_rate ||
+                             s.BytesJeAbtastung != sc->sc_bja)) {
+                    err = -1;                        /* anderes Format: belegt */
+                } else
                 if (!lief) {
                     err = ntua_starten(sc, &s);       /* legt Format/Strom an */
                     if (err == 0) sc->sc_besitzer = sl->FileObject;
@@ -787,7 +803,7 @@ ntua_ioctl (PDEVICE_OBJECT dev, PIRP irp)
                 } else {
                     ntua_klient_weg(sc, kl);
                     if (!lief) ntua_stoppen(sc, 0);
-                    st = STATUS_UNSUCCESSFUL;
+                    st = (err == -1) ? STATUS_DEVICE_BUSY : STATUS_UNSUCCESSFUL;
                 }
             }
         }
@@ -977,6 +993,15 @@ ntua_detach (device_t dev)
     ntua_nt_abbauen(sc);
     KeWaitForSingleObject(&sc->sc_steuer, Executive, KernelMode, FALSE, NULL);
     ntua_stoppen(sc, 1);
+    /*  Seit dem Mischer hat jeder Oeffner einen eigenen Ring.  Wird das
+     *  Geraet abgezogen, waehrend jemand spielt, blieben sie sonst
+     *  liegen (ntua_stoppen kennt nur den alten gemeinsamen Ring).  */
+    {
+        int i;
+        for (i = 0; i < NTUA_KLIENTEN; i += 1) {
+            if (sc->sc_kl[i].k_besitzer != NULL) ntua_klient_weg(sc, &sc->sc_kl[i]);
+        }
+    }
     KeReleaseMutex(&sc->sc_steuer, FALSE);
     mtx_destroy(&sc->sc_mtx);
     return 0;

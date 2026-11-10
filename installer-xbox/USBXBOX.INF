@@ -1,67 +1,66 @@
-; USBXBOX.INF -- USB-Gamepads (Xbox) fuer Windows NT 4.0
+; USBXBOX.INF -- USB-Gamepads (Xbox 360/One/Series, HID) fuer Windows NT 4.0
 ;
 ; Einrichten:  Rechtsklick auf diese Datei -> Installieren
 ;      oder:   rundll32 setupapi,InstallHinfSection DefaultInstall 132 .\USBXBOX.INF
-;
 ; Danach neu starten.
 ;
-; HINWEIS: XBOXINST.EXE ist der bessere Weg, wenn schon eine Soundkarte
-; im Rechner steckt.  Es sucht den ersten freien winmm-Namen (wave, sonst
-; wave1..wave9 und mixer, sonst mixer1..9) und laesst die vorhandene Karte
-; in Ruhe.  Diese INF traegt fest "wave1" und "mixer1" ein -- richtig fuer
-; den Fall MIT vorhandener Soundkarte.  Ist USB-Audio das EINZIGE Geraet,
-; bitte AUDIOINST.EXE benutzen oder unten wave1/mixer1 in wave/mixer
-; aendern.
+; XBOXINST.EXE BLEIBT DER BESSERE WEG.
+; Es prueft usbnt.sys, SICHERT den bisherigen winmm-Joystick-Treiber
+; (Drivers32 "joystick") und schaltet einen vorhandenen Gameport-Dienst
+; ab, damit "XBOXINST aus" alles wiederherstellt.  Eine INF kann den alten
+; Wert nicht lesen: sie UEBERSCHREIBT Drivers32 "joystick".  War dort ein
+; anderer Joystick-Treiber eingetragen, ist er danach ausgetragen und
+; wird beim Entfernen NICHT wiederhergestellt -- dann XBOXINST.EXE nehmen.
+; Voraussetzung: das USB-Paket (usbnt.sys) ist schon eingerichtet.
 ;
-; Entfernen: ENTFERNE.BAT  (oder AUDIOINST.EXE aus)
+; Die Werte unten sind aus der Quelle von XBOXINST.EXE abgelesen
+; (quelle/werkzeug/xboxinst.c), nicht geschaetzt.  Aendert sich
+; dort etwas, muss diese Datei nachgezogen werden.
 
 [Version]
 Signature  = "$Windows NT$"
-Class      = MEDIA
 Provider   = %Hersteller%
 
 [DefaultInstall]
-CopyFiles  = Dateien.Sys, Dateien.Dll, Dateien.Exe
+CopyFiles  = Dateien.Treiber, Dateien.System
 AddReg     = Reg.Dienst, Reg.Joystick
 
 [DestinationDirs]
-Dateien.Sys = 12                ; %SystemRoot%\system32\drivers
-Dateien.Dll = 11                ; %SystemRoot%\system32
-Dateien.Exe = 11
+Dateien.Treiber = 12            ; %SystemRoot%\system32\drivers
+Dateien.System  = 11            ; %SystemRoot%\system32
 
-[Dateien.Sys]
+[Dateien.Treiber]
 USBXBOX.SYS
 
-[Dateien.Dll]
+[Dateien.System]
 USBJOY.DLL
-
-[Dateien.Exe]
+USBJOY.CPL
 JOYTEST.EXE
 
-; ---- Kerntreiber als Dienst -------------------------------------------
-; Start 3 = manuell; USBINST/der USB-Stapel laedt ihn beim Anstecken.
-; Group "Extended base" laeuft nach dem USB-Grundtreiber an.
+; Dienst wie CreateService in xboxinst.c.
 [Reg.Dienst]
-HKLM,"SYSTEM\CurrentControlSet\Services\usbaudio","Type",0x00010001,1
-HKLM,"SYSTEM\CurrentControlSet\Services\usbaudio","Start",0x00010001,3
-HKLM,"SYSTEM\CurrentControlSet\Services\usbaudio","ErrorControl",0x00010001,1
-HKLM,"SYSTEM\CurrentControlSet\Services\usbaudio","Group",0x00000000,"Extended base"
-HKLM,"SYSTEM\CurrentControlSet\Services\usbaudio","ImagePath",0x00000000,"System32\DRIVERS\usbaudio.sys"
-HKLM,"SYSTEM\CurrentControlSet\Services\usbaudio","DisplayName",0x00000000,"USB-Gamepads (Xbox)"
+HKLM,"SYSTEM\CurrentControlSet\Services\usbxbox","Type",0x00010001,1
+HKLM,"SYSTEM\CurrentControlSet\Services\usbxbox","Start",0x00010001,1
+HKLM,"SYSTEM\CurrentControlSet\Services\usbxbox","ErrorControl",0x00010001,0
+HKLM,"SYSTEM\CurrentControlSet\Services\usbxbox","Group",0x00000000,"Extended Base"
+HKLM,"SYSTEM\CurrentControlSet\Services\usbxbox","ImagePath",0x00020000,"System32\drivers\usbxbox.sys"
+HKLM,"SYSTEM\CurrentControlSet\Services\usbxbox","DisplayName",0x00000000,"USB-Gamepads (Xbox, HID)"
 
-; ---- Joystick-Unterstuetzung (winmm) ---------------------------------
+; winmm-Joystick-Treiber und sein Eintrag fuer die Systemsteuerung.
 [Reg.Joystick]
-HKLM,"SYSTEM\CurrentControlSet\Control\MediaResources\joystick\usbjoy","Driver",0x00000000,"usbjoy.dll"
-HKLM,"SYSTEM\CurrentControlSet\Control\MediaResources\joystick\usbjoy","Description",0x00000000,"USB-Gamepads (Xbox)"
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Drivers32","joystick",0x00000000,"usbjoy.dll"
+HKLM,"System\CurrentControlSet\Control\MediaResources\Joystick\usbjoy.dll","Description",0x00000000,"USB-Gamepad (usbjoy)"
+HKLM,"System\CurrentControlSet\Control\MediaResources\Joystick\usbjoy.dll","Driver",0x00000000,"usbjoy.dll"
 
 [SourceDisksNames]
 1 = %Datentraeger%,,
 
 [SourceDisksFiles]
 USBXBOX.SYS = 1
-USBJOY.DLL   = 1
-JOYTEST.EXE  = 1
+USBJOY.DLL  = 1
+USBJOY.CPL  = 1
+JOYTEST.EXE = 1
 
 [Strings]
 Hersteller   = "FreeBSD-USB auf NT 4.0"
-Datentraeger = "USB-Audio fuer NT 4.0"
+Datentraeger = "USB-Gamepads fuer NT 4.0"

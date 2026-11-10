@@ -488,9 +488,16 @@ oeffnen (UINT nr, INST **aus, LPWAVEOPENDESC od, DWORD flags)
     x->wf.cbSize = 0;
     x->cb = od->dwCallback; x->cbinst = od->dwInstance; x->flags = flags; x->hw = od->hWave;
 
-    /*  Rate des Programms, wenn das Geraet sie kann -- sonst 48 kHz.  */
-    d->alt = uac_wiedergabe(&d->g, x->wf.nSamplesPerSec, &r);
+    /*  IMMER dieselbe Geraeterate -- die beim Auflisten ermittelte
+     *  (48 kHz, wenn das Geraet sie kann).  Frueher nahm jede Oeffnung die
+     *  Rate ihres Programms, wenn das Geraet sie konnte.  Seit der Treiber
+     *  mehrere Klienten in EINEN Strom mischt, ist das falsch: laeuft
+     *  Musik mit 44,1 kHz und kommt ein Systemklang dazu, rechnete dessen
+     *  Instanz auf 48 kHz um -- im 44,1-kHz-Strom klang er rund 8 % zu
+     *  tief und zu langsam.  Jede Instanz dieser DLL (sie wird je Prozess
+     *  geladen) muss deshalb unabhaengig zum selben Ergebnis kommen.  */
     if (d->alt == 0) { HeapFree(GetProcessHeap(), 0, x); return MMSYSERR_NODRIVER; }
+    r = d->rate48;
     x->drate   = r;
     x->schritt = (double)x->wf.nSamplesPerSec / (double)r;
     x->t       = 1.0;                         /* erste Abtastung nur merken */
@@ -1289,6 +1296,21 @@ waechter_faden (LPVOID arg)
     return 0;
 }
 
+/*  Waechter beenden und abwarten.  Ohne das liefe der Faden weiter,
+ *  wenn winmm diese DLL entlaedt -- in freigegebenem Code, und das
+ *  Programm stuerzte ab.  Nicht aus DllEntry rufen (Ladesperre: der
+ *  Faden koennte nicht enden, das Warten liefe ins Leere).  */
+static void
+waechter_beenden (void)
+{
+    HANDLE h = g_waechter;
+    if (h == 0) return;
+    g_waechter_aus = 1;
+    WaitForSingleObject(h, 3000);         /* ein Umlauf dauert 400 ms */
+    CloseHandle(h);
+    g_waechter = 0;
+}
+
 static void
 mx_melden (int geraet, DWORD id)
 {
@@ -1359,6 +1381,8 @@ mxdMessage (UINT nr, UINT msg, DWORD_PTR user, DWORD_PTR p1, DWORD_PTR p2)
 
     case MXDM_CLOSE:
         if (user >= 1 && user <= 8) mx_offen[user - 1].belegt = 0;
+        for (k = 0; k < 8 && !mx_offen[k].belegt; k += 1) ;
+        if (k == 8) waechter_beenden();   /* letzter Mixer zu: Waechter aus */
         return MMSYSERR_NOERROR;
 
     case MXDM_GETLINEINFO: {
@@ -1455,8 +1479,10 @@ LRESULT APIENTRY
 DriverProc (DWORD_PTR id, HDRVR hdrv, UINT msg, LPARAM p1, LPARAM p2)
 {
     switch (msg) {
-    case DRV_LOAD:
     case DRV_FREE:
+        waechter_beenden();               /* vor dem Entladen der DLL */
+        return 1;
+    case DRV_LOAD:
     case DRV_OPEN:
     case DRV_CLOSE:
     case DRV_ENABLE:

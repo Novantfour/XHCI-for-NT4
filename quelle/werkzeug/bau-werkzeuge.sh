@@ -94,8 +94,10 @@ konsole usbinst    "-lkernel32 -ladvapi32 -luser32" "$(ver usbinst exe 'Einricht
 konsole xboxinst   "-lkernel32 -ladvapi32 -luser32" "$(ver xboxinst exe 'Einrichtung der USB-Gamepads (Befehlszeile)' XBOXINST.EXE)"
 konsole audioinst  "-lkernel32 -ladvapi32 -luser32" "$(ver audioinst exe 'Einrichtung von USB-Audio (Befehlszeile)' AUDIOINST.EXE)"
 konsole usbton     "uac.c -lkernel32 -ladvapi32 -luser32 -lwinmm -lversion" "$(ver usbton exe 'USB-Audio pruefen und Ton ausgeben (UAC1)' USBTON.EXE)"
+konsole hidtest    "-lkernel32 -luser32" "$(ver hidtest exe 'HID-Geraete anzeigen (ueber HID.DLL)' HIDTEST.EXE)"
 konsole usbtest    "-lkernel32 -ladvapi32" "$(ver usbtest exe 'USB-Treiber: Zustand und Geraetebaum' USBTEST.EXE)"
 konsole xhcitest   "-lkernel32 -ladvapi32" "$(ver xhcitest exe 'USB-Treiber: xHCI-Pruefung' XHCITEST.EXE)"
+konsole diprobe    "-lkernel32 -luser32 -lwinmm -ldinput" "$(ver diprobe exe 'USB-Treiber: DirectInput-Probe' DIPROBE.EXE)"
 konsole joytest    "-lkernel32 -lwinmm" "$(ver joytest exe 'USB-Treiber: Gamepad-Pruefung' JOYTEST.EXE)"
 konsole usbdruck   "-lkernel32" "$(ver usbdruck exe 'USB-Treiber: Drucker-Pruefung' USBDRUCK.EXE)"
 konsole ipptest    "-lkernel32" "$(ver ipptest exe 'USB-Treiber: Drucker-Schnittstelle pruefen' IPPTEST.EXE)"
@@ -112,6 +114,12 @@ dll usbjoy    dll "-lkernel32 -luser32 -ladvapi32 -lwinmm" "$(ver usbjoy dll 'Jo
 dll usbjoycpl cpl "-lkernel32 -luser32 -lgdi32 -lwinmm -lcomctl32" "$(ver usbjoycpl dll 'Systemsteuerung Joystick' USBJOY.CPL)"
 mv "$Z/usbjoycpl.cpl" "$Z/usbjoy.cpl"
 # usbaudio.dll: winmm-Wave-Treiber, mit uac.c und ntbasis.c (ohne Startcode).
+# HID.DLL -- die originalen HID-Schnittstellen fuer NT 4.0 (aufgesetzt auf
+# \\\\.\\UsbGenN).  Quelle hiddll.c, damit der Name nicht mit einer
+# moeglichen hid.c kollidiert; -I.. fuer ober/ntusbgen.h.
+$CC $F -I.. -shared -o "$Z/hid.dll" hiddll.c hid.def "$(ver hid dll 'HID-Schnittstelle fuer Programme (NT 4.0)' HID.DLL)" \
+    -Wl,-e,_DllEntry@12 -Wl,--enable-stdcall-fixup $NT4 -lkernel32 -luser32
+i686-w64-mingw32-strip "$Z/hid.dll"
 $CC $F -DNTB_DLL -shared -o "$Z/usbaudio.dll" usbaudio.c uac.c ntbasis.c usbaudio.def \
     "$(ver usbaudio dll 'USB-Audio: Wave-Treiber fuer winmm (UAC1)' USBAUDIO.DLL)" \
     -Wl,-e,_DllEntry@12 -Wl,--enable-stdcall-fixup $NT4 -lkernel32 -luser32 -ladvapi32 -lwinmm

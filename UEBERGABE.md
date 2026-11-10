@@ -145,6 +145,29 @@ doppelt verbreitert, Fehler 123).  Braucht usbnt.sys ab 2026.10.9.1
 (52 Exporte).  Pruefstand: pruefstand/boot-audio.sh <uhci|ohci|xhci>,
 Ausgabe in /tmp/ton.wav, pruefstand/sinuspruef.py.
 
+## 11. November: Durchsicht des ganzen Baums
+
+Der Baum liegt jetzt als Quellcode auf GitHub.  Bei der Durchsicht
+gefunden und behoben: fehlerhafte INF-Dateien (USBXBOX.INF richtete den
+falschen Dienst ein), fehlende Ressourcendateien (14 Programme ohne
+Versionsangabe ausgeliefert), HID/diprobe in keinem Bauskript, im
+Audio-Teil ein Wettlauf beim Neustart des Stroms, falsche Tonhoehe bei
+zwei Quellen mit verschiedener Rate, ein nie endender Waechterfaden und
+ein Leck beim Abziehen.  Einzelheiten: AENDERUNGEN.md 2026.11.11.1.
+
+**Stand der Binaerdateien:** Installer und bin/ = 2026.10.11.4 (laeuft an
+der echten Maschine), nur die INF-Dateien sind berichtigt.  Der Neubau
+liegt in `bin/ungeprueft-2026.11.11.1/` und ist NICHT gelaufen.
+**Naechster Schritt:** Neubau am echten Geraet pruefen, dann in die
+Installer uebernehmen.  Die INF-Dateien sind ebenfalls noch nicht auf
+NT 4.0 erprobt.
+
+Bauumgebung neu aufsetzen (ging bei einem Zuruecksetzen verloren):
+DDK-ISO nach `<ddk>/x` entpacken, `ddk-ersatz/ntddk-patch.py x/inc
+x/inc-patched`, `ddk-ersatz/*.h` nach `x/sdk`; clang-18, lld-18, llvm-18;
+`clang-cl`, `lld-link`, `llvm-nm` als Namen ohne -18 bereitstellen; dann
+`DDK=<ddk>/x UNT=<repo>/quelle SRC=<repo>/freebsd sh bau-clangcl.sh`.
+
 ## 10. Oktober (3): USB-Audio Lautstaerke -- endgueltig
 
 2026.10.10.3: Oeffnen stellt nur hoerbar, wenn das Geraet am Minimum steht
@@ -299,7 +322,8 @@ fehlt") und musste zurückgenommen werden.
 
 ```
 cd quelle && ./bau-clangcl.sh          # Treiber, alle fünf Bauarten
-cd werkzeug && ./bau-werkzeuge.sh ZIEL # 19 Werkzeuge
+cd werkzeug && ./bau-werkzeuge.sh ZIEL # 25 Programme (EXE, DLL, CPL)
+python3 pruefe-bau.py ZIEL .           # danach IMMER: Abschnitte, Pruefsumme, Version, Importe
 cd geraetemanager && ./bau-hier.sh     # DEVMGR.EXE/CPL + PCISCAN.SYS
 ```
 

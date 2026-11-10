@@ -38,8 +38,9 @@ Werkzeuge (nicht eingerichtet, nur zum Pruefen)
 
 Zustand anzeigen: XBOXINST ohne Argument.
 
-USBXBOX.INF -- Einrichten per INF
+USBXBOX.INF -- Einrichten per INF (berichtigt 2026.11.11)
   Rechtsklick auf USBXBOX.INF -> Installieren, danach neu starten.
-  Die mitgelieferte EXE ist der bessere Weg (sie prueft Vorhandenes
-  und waehlt freie Eintraege); die INF ist fuer alle, die den
-  Windows-eigenen Weg bevorzugen.
+  XBOXINST.EXE bleibt der bessere Weg: es prueft, sichert und sucht freie
+  Eintraege; die INF traegt feste Werte ein.  Was sie NICHT tut, steht
+  in ihrem Kopf.  Die INF aus Fassung 2026.10.11.4 war fehlerhaft --
+  nicht benutzen.  Diese Fassung ist noch nicht auf NT 4.0 erprobt.

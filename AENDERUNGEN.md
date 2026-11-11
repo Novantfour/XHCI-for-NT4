@@ -1912,8 +1912,67 @@ Stand der Binaerdateien -- WICHTIG:
 - bin/treiber, bin/programme und alle installer-* enthalten weiter die
   Fassung 2026.10.11.4, die an der echten Maschine laeuft.  Geaendert
   wurden dort NUR die INF-Dateien.
-- bin/ungeprueft-2026.11.11.1/ enthaelt den Neubau aus dem heutigen
+- bin/ungeprueft-2026.11.11.2/ enthaelt den Neubau aus dem heutigen
   Quellstand: 7 Treiber, 25 Programme, pruefe-bau.py ohne Maengel.
   Gebaut und statisch geprueft, aber NICHT gelaufen -- weder im Pruefstand
   (mit dem Arbeitsbereich verloren) noch an der echten Maschine.  Erst
   nach einem Lauf in die Installer uebernehmen.
+
+## Fassung 2026.11.11.2: Durchsicht des Host-Controller-Teils
+
+Nur usbnt.sys und die vier Einzelbauformen; Audio blieb aussen vor.
+
+Geprueft:
+- Herkunft: alle 17 Dateien unter freebsd/dev/usb/controller/ (xhci, ehci,
+  ohci, uhci, jeweils .c/_pci.c/.h/reg.h, usb_controller.c) sind bitgleich
+  mit FreeBSD main, Commit 139fa2c1 -- HERKUNFT.txt stimmt.  Fehler koennen
+  also nur in der NT-Unterlage (quelle/nt, ~4900 Zeilen) liegen.
+- Uebersetzung der Unterlage und der Controller mit eingeschalteten
+  Warnungen (der Bau laeuft sonst mit -w): keine ernsthafte Meldung in
+  der Unterlage.  Die "may be uninitialized" in ehci.c/ohci.c/xhci.c
+  stehen im unveraenderten FreeBSD-Code.
+- Durchgelesen: PCI-Zugriff, Registerblock abbilden/freigeben,
+  Unterbrechung anhaengen/abbauen, ISR, Erkennen/Sperren/Freigeben je
+  Controllerart.
+
+Behoben (quelle/nt/ntgeraet.c):
+1. 64-Bit-Registerblock.  bus_alloc_resource_any las nur das untere
+   BAR-Register (bus.HighPart = 0).  Liegt der Block oberhalb von 4 GB
+   ("Above 4G Decoding", bei xHCI auf neueren Platinen ueblich), wurde
+   die untere Adresshaelfte abgebildet -- fremder Speicher -- und als
+   Registerblock gelesen.  Jetzt wird bei 64-Bit-BARs die obere Haelfte
+   gelesen; ist sie nicht null, bricht das Anhaengen mit klarer Meldung
+   ab (NT 4.0 kann dort nichts abbilden).  Dazu: ein E/A-BAR, wo Speicher
+   erwartet wird, wird abgewiesen.
+2. bus_teardown_intr: nach IoDisconnectInterrupt konnte noch ein DPC in
+   der Warteschlange stehen und nach ntu_free(i) laufen.  Jetzt
+   KeRemoveQueueDpc; dev->Intr wird geloescht.
+3. bus_release_resource: dev->Res zeigte nach der Freigabe weiter auf den
+   freigegebenen Block.
+
+Befunde, NICHT geaendert (brauchen einen Lauf an echter Hardware):
+a. Herunterfahren.  Es gibt weder IRP_MJ_SHUTDOWN noch
+   IoRegisterShutdownNotification; bus_generic_shutdown ist leer.  Beim
+   Neustart laufen die Controller weiter (Unterbrechungen frei, DMA
+   aktiv).  FreeBSD haelt sie ueber usb_shutdown -> set_hw_power_sleep
+   (USB_HW_POWER_SHUTDOWN) an.  Nicht blind einbauen: unter NT 4.0 kommt
+   die Abschaltmeldung VOR dem Schreiben der Dateisysteme -- ein
+   Controller-Halt dort kann Daten auf einem USB-Datentraeger kosten.
+   Erst die Reihenfolge am Pruefstand klaeren.
+b. xHCI, Host System Error.  FreeBSD schaltet USBCMD.HSEE ein; ein HSE
+   zieht die Leitung ohne EINT/IMAN.IP.  Der Filter (ntu_intr_erkannt)
+   meldet dann "nicht meins", die pegelgesteuerte Leitung bleibt stehen
+   -> Dauerunterbrechung.  Abhilfe waere: HSE im Filter mitnehmen und
+   beim Sperren HSEE loeschen.  Reiner Hardwarefehlerpfad.
+c. UHCI-Filter nimmt USBSTS & 0x3F; Bit 5 (HCHalted) ist ein Zustand und
+   keine Unterbrechungsquelle.  Ein angehaltener UHCI auf geteilter
+   Leitung beansprucht damit die Unterbrechungen der Nachbarn zuerst
+   (wird ueber "Gesperrt" wieder aufgeloest, kostet aber Umwege).  0x1F
+   waere genauer.  FreeBSD prueft genauso (UHCI_STS_ALLINTRS), dort stoert
+   es nicht, weil jeder Handler gerufen wird.
+d. UHCI: HSE und HCPE sind nicht ueber USBINTR sperrbar.  Zwischen ISR
+   und Faden bleibt die Leitung in diesem Fehlerfall stehen.
+
+Gebaut: usbnt.sys, uhcint/ohcint/ehcint/xhcint.sys als 2026.11.11.2 in
+bin/ungeprueft-2026.11.11.2/treiber, pruefe-bau.py ohne Maengel.
+NICHT gelaufen.  Installer und bin/treiber bleiben 2026.10.11.4.

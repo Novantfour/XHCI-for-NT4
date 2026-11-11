@@ -157,10 +157,17 @@ ein Leck beim Abziehen.  Einzelheiten: AENDERUNGEN.md 2026.11.11.1.
 
 **Stand der Binaerdateien:** Installer und bin/ = 2026.10.11.4 (laeuft an
 der echten Maschine), nur die INF-Dateien sind berichtigt.  Der Neubau
-liegt in `bin/ungeprueft-2026.11.11.1/` und ist NICHT gelaufen.
+liegt in `bin/ungeprueft-2026.11.11.2/` und ist NICHT gelaufen.
 **Naechster Schritt:** Neubau am echten Geraet pruefen, dann in die
 Installer uebernehmen.  Die INF-Dateien sind ebenfalls noch nicht auf
 NT 4.0 erprobt.
+
+Host-Controller-Teil eigens durchgesehen (2026.11.11.2): Controller-
+Dateien bitgleich mit FreeBSD; in der Unterlage drei Fehler behoben
+(64-Bit-Registerblock oberhalb 4 GB wurde falsch abgebildet, DPC nach
+Abbau der Unterbrechung, haengende Zeiger).  Offen und bewusst nicht
+angefasst: kein Anhalten der Controller beim Herunterfahren, xHCI-
+Systemfehler im Filter, UHCI-Halt-Bit -- siehe AENDERUNGEN.md.
 
 Bauumgebung neu aufsetzen (ging bei einem Zuruecksetzen verloren):
 DDK-ISO nach `<ddk>/x` entpacken, `ddk-ersatz/ntddk-patch.py x/inc

@@ -221,6 +221,36 @@ bus_alloc_resource_any (device_t dev, int type, int *rid, unsigned int flags)
     /*  Speicher.  Bit 0 ist frei, Bit 1..2 sagen die Breite, Bit 3 ob
      *  vorablesbar -- alles nicht Teil der Adresse.  */
 
+    if ((bar & 0x1u) != 0) {
+        ntu_printf("usb: BAR %02x ist ein E/A-Bereich, erwartet war "
+                   "Speicher (%08x)\n", r->r_rid, bar);
+        ntu_free(r);
+        return 0;
+    }
+
+    /*  64-Bit-Registerblock (Bit 1..2 = 10b): die obere Haelfte der
+     *  Adresse steht im NAECHSTEN Register.  xHCI-Bausteine haben fast
+     *  immer einen solchen, und neuere Hauptplatinen legen ihn mit
+     *  "Above 4G Decoding" oberhalb von 4 GB.  NT 4.0 kann dort nichts
+     *  abbilden.  Frueher wurde die obere Haelfte gar nicht gelesen:
+     *  der Treiber bildete dann die untere Haelfte ab -- FREMDEN Speicher
+     *  -- und las dort vermeintliche Register.  Das ist kein Fall zum
+     *  Weitermachen, sondern einer fuer eine klare Meldung.  */
+
+    if ((bar & 0x6u) == 0x4u) {
+
+        uint32_t oben = pci_read_config(dev, r->r_rid + 4, 4);
+
+        if (oben != 0) {
+            ntu_printf("usb: Registerblock liegt bei %08x%08x, oberhalb "
+                       "von 4 GB -- fuer NT 4.0 unerreichbar.  Im BIOS "
+                       "\"Above 4G Decoding\" abschalten.\n",
+                       oben, bar & ~0xFu);
+            ntu_free(r);
+            return 0;
+        }
+    }
+
     r->r_start = bar & ~0xFu;
 
     if (r->r_start == 0) {
@@ -329,6 +359,13 @@ bus_release_resource (device_t dev, int type, int rid, struct resource *r)
 
     if (type == SYS_RES_MEMORY && r->r_handle != 0) {
         MmUnmapIoSpace((PVOID)r->r_handle, r->r_len);
+    }
+
+    /*  dev->Res zeigt auf genau diesen Block (bus_setup_intr liest ihn);
+     *  nach der Freigabe darf er nicht stehen bleiben.  */
+
+    if (dev != 0 && dev->Res == r) {
+        dev->Res = 0;
     }
 
     ntu_free(r);
@@ -599,6 +636,17 @@ bus_teardown_intr (device_t dev, struct resource *r, void *cookie)
      *  wartet, und der naechste Ruf laeuft in freigegebenen Speicher.  */
 
     IoDisconnectInterrupt(i->Object);
+
+    /*  Der ISR kann unmittelbar vor dem Abklemmen noch einen DPC
+     *  eingereiht haben.  Der liefe sonst nach ntu_free(i) und setzte ein
+     *  Ereignis in freigegebenem Speicher.  */
+
+    KeRemoveQueueDpc(&i->Dpc);
+
+    if (dev != 0 && dev->Intr == i) {
+        dev->Intr = 0;
+    }
+
     i->Stop = 1;
     KeSetEvent(&i->Wake, 0, FALSE);
     ntu_thread_stop(i->Thread);

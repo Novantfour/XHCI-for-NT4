@@ -214,7 +214,7 @@ Die vollständige Liste offener Punkte steht in `PRUEFLISTE.md`.
 | `pruefstand/` | die Werkzeuge, mit denen unter QEMU geprüft wurde |
 | `bau-clangcl.sh`, `einfuhrlib.py`, `pruefsumme.py`, `ddk-ersatz/` | zum Bauen |
 | `pruefe-bau.py` | nach jedem Bau: Abschnitte, PE-Prüfsumme, Versionsangabe, NT-4.0-fremde Importe |
-| `bin/ungeprueft-2026.11.11.1/` | Neubau aus dem aktuellen Quellstand – gebaut und statisch geprüft, **nicht gelaufen** |
+| `bin/ungeprueft-2026.11.11.2/` | Neubau aus dem aktuellen Quellstand – gebaut und statisch geprüft, **nicht gelaufen** |
 | `hid/` | HID für NT 4.0 (Beschreibung; Quellen in `quelle/werkzeug/hiddll.c`, `hidtest.c`) |
 | `kernelpatch/` | freiwillige Ergänzung für einen selbst gebauten NT-Kern (erweitert dessen PCI-Suchlauf um USB-Angaben); der Treiber braucht sie nicht |
 

@@ -1,4 +1,4 @@
-# Neubau 2026.11.11.1 — ungeprüft
+# Neubau 2026.11.11.2 — ungeprüft
 
 Gebaut aus dem Quellstand dieses Repos (clang-cl/lld-link gegen das
 NT-4.0-DDK für die Treiber, mingw ohne C-Laufzeit für die Programme).
@@ -9,8 +9,12 @@ PE-Prüfsummen, Versionsangaben, keine NT-4.0-fremden Importe.
 Maschine. Die Installer-Ordner enthalten deshalb weiter die Fassung
 2026.10.11.4.
 
-Gegenüber 2026.10.11.4 geändert ist im Code nur der Audio-Teil
-(`usbaudio.sys`, `usbaudio.dll`) — siehe `AENDERUNGEN.md`. Alle anderen
+Die Treiber in `treiber/` sind Fassung 2026.11.11.2, die Programme in
+`programme/` 2026.11.11.1. Gegenüber 2026.10.11.4 geändert sind der
+Audio-Teil (`usbaudio.sys`, `usbaudio.dll`) und in der Unterlage des
+Host-Controller-Treibers drei Stellen (64-Bit-Registerblock oberhalb
+4 GB, Abbau der Unterbrechung, Freigabe des Registerblocks) — siehe
+`AENDERUNGEN.md`. Alle anderen
 Dateien sind derselbe Code, neu gebaut; die Programme haben jetzt
 durchgehend eine Versionsangabe. Neu sind `hid.dll`, `hidtest.exe` und
 `diprobe.exe` aus dem Bauskript.

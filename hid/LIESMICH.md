@@ -13,7 +13,7 @@ Treiber ist nicht nötig: unser USB-Stapel kann schon alles und bietet es
 Die Quellen liegen in `quelle/werkzeug/` (`hiddll.c`, `hid.def`,
 `hidtest.c`) und werden von `bau-werkzeuge.sh` mitgebaut -- hier liegt
 bewusst keine zweite Kopie.  Gebaute Dateien:
-`bin/ungeprueft-2026.11.11.1/programme/hid.dll` und `hidtest.exe`
+`bin/ungeprueft-2026.11.11.2/programme/hid.dll` und `hidtest.exe`
 (beide ohne C-Laufzeit, mit Versionsangabe).  **Noch nicht auf NT 4.0
 gelaufen.**
 

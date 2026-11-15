@@ -84,6 +84,74 @@ static ULONG ntu_bildschirm_zeilen;
 static LONGLONG ntu_bildschirm_t0;
 NTHALAPI VOID NTAPI HalDisplayString (PUCHAR s);
 
+/*  Alle Bildschirmzeilen merken (gekuerzt), damit sie nach dem Warten
+ *  gefiltert noch einmal ausgegeben werden koennen -- auf dem echten
+ *  Rechner rollen die wichtigen sonst weg, bevor der Bluescreen kommt.  */
+#define NTU_BS_ZEILEN 160
+static CHAR  ntu_bs_log[NTU_BS_ZEILEN][96];
+static ULONG ntu_bs_n;
+
+static VOID
+ntu_bildschirm_merken (const CHAR *z)
+{
+    if (ntu_bs_n < NTU_BS_ZEILEN) {
+        ULONG k;
+        for (k = 0; k < 94 && z[k] != '\0' && z[k] != '\n'; k += 1) {
+            ntu_bs_log[ntu_bs_n][k] = z[k];
+        }
+        ntu_bs_log[ntu_bs_n][k++] = '\n';
+        ntu_bs_log[ntu_bs_n][k]   = '\0';
+        ntu_bs_n += 1;
+    }
+}
+
+static BOOLEAN
+ntu_bs_wichtig (const CHAR *z)
+{
+    static const CHAR *muster[] = {
+        "usb: 0", "usb: 1", "usb: 2", "usb: 3", "usb: 4", "usb: 5", "usb: 6",
+        "usb: 7", "usb: 8", "usb: 9", "usb: a", "usb: b", "usb: c", "usb: d",
+        "usb: e", "usb: f", "Hostbaust", "Abfrage", "Leitung", "uhub", "ugen",
+        "umass", "ums", "ukbd", "angehaengt", "fehl", "Fehl", "error",
+        "timeout", "Timeout", "nicht", "BAR", "port", "Port", 0 };
+    ULONG m;
+    for (m = 0; muster[m]; m += 1) {
+        const CHAR *p = z, *q;
+        for (; *p; p += 1) {
+            const CHAR *a = p;
+            for (q = muster[m]; *q && *a == *q; q += 1, a += 1) ;
+            if (*q == '\0') {
+                return TRUE;
+            }
+        }
+    }
+    return FALSE;
+}
+
+VOID
+ntu_bildschirm_zusammenfassung (ULONG sekunden)
+{
+    ULONG k, n = 0;
+    LARGE_INTEGER t;
+
+    if (!ntu_bildschirm) {
+        return;
+    }
+    ntu_bildschirm = 0;                 /* ab jetzt nichts mehr dazwischen */
+    HalDisplayString((PUCHAR)"\n===== usbnt: KEIN USB-CD/DVD -- Zusammenfassung "
+                     "(bitte fotografieren) =====\n");
+    for (k = 0; k < ntu_bs_n && n < 44; k += 1) {
+        if (ntu_bs_wichtig(ntu_bs_log[k])) {
+            HalDisplayString((PUCHAR)ntu_bs_log[k]);
+            n += 1;
+        }
+    }
+    HalDisplayString((PUCHAR)"===== weiter in 90 s =====\n");
+    t.QuadPart = -(LONGLONG)sekunden * 10000000;
+    KeDelayExecutionThread(KernelMode, FALSE, &t);
+    ntu_bildschirm = 1;
+}
+
 #define NTU_UART        ((PUCHAR)(ULONG_PTR)ntu_uart_basis)
 #define NTU_UART_LSR    ((PUCHAR)(ULONG_PTR)(ntu_uart_basis + 5))
 #define NTU_UART_THRE   0x20
@@ -373,6 +441,7 @@ ntu_printf (const char *fmt, ...)
                   ntu_buf[0] == '\r' ? ntu_buf + 2 : ntu_buf);
         z[sizeof(z) - 1] = '\0';
         HalDisplayString((PUCHAR)z);
+        ntu_bildschirm_merken(z);
     }
 #if !defined(NTU_KISERIAL) && !defined(NTU_OHNE_SERIELL)
     if (ntu_ring_an) {

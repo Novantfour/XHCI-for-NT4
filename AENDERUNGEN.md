@@ -1,3 +1,20 @@
+# Fassung 2026.11.15.57 -- Ryzen-USB hinter einer Bus-Luecke
+
+Zweiter Lauf auf dem EliteDesk 705 G5 (Abfragebetrieb aktiv): der
+Chipsatz-xHCI 1022:43d2 lief, Tastatur, Maus und Bluetooth wurden
+gefunden -- das USB-DVD-Laufwerk an der vorderen Buchse nicht.  Die
+Buchse haengt an einem xHCI der Ryzen-APU; den fand die PCI-Suche nie,
+weil sie hinter Bus 8 beim ersten leeren Bus aufhoerte.  Jetzt alle 256
+Busse.  QEMU: qemu-xhci hinter pxb-pcie auf Bus 13 -- gefunden, Setup
+startet.
+
+BIOS-Uebergabe (xhci_pci.c, ehci_pci.c): 100 statt 500 Runden.  Unter
+NT runden die 10-ms-Pausen auf den Systemtakt, 500 Runden waren ~10 s je
+Baustein; das BIOS des 705 G5 gibt im CSM nie frei.
+
+Setup-Diagnose: Wartezeit 30 s mit Zwischenmeldung alle 5 s; ohne
+Laufwerk eine gefilterte Zusammenfassung und 90 s Pause zum Abfotografieren.
+
 # Fassung 2026.11.15.56 -- Abfragebetrieb ohne IRQ-Leitung
 
 HP EliteDesk 705 G5 (Ryzen 5 PRO 3400GE, CSM): Setup blieb nach dem

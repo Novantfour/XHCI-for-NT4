@@ -543,7 +543,10 @@ xhci_pci_take_controller(device_t self)
 		    "to give up control\n");
 		XWRITE1(sc, capa, eecp +
 		    XHCI_XECP_OS_SEM, 1);
-		to = 500;
+		/* NT 4.0: usb_pause_mtx rundet auf den Systemtakt (10-15 ms),
+		 * 500 Runden wurden ~10 s.  Linux wartet 1 s und uebernimmt
+		 * dann; HP EliteDesk 705 G5 gibt im CSM nie frei. */
+		to = 100;
 		while (1) {
 			bios_sem = XREAD1(sc, capa, eecp +
 			    XHCI_XECP_BIOS_SEM);

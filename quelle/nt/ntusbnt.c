@@ -148,13 +148,14 @@ ntu_scan_pci (VOID)
             }
         }
 
-        /*  Dieselbe Abbruchbedingung wie im Kern: hinter Bus 8 ohne
-         *  einen einzigen Fund ist Schluss.  Ein Brett mit Bussen
-         *  jenseits 8 und einer Luecke davor gibt es nicht.  */
-
-        if (bus > 8 && onbus == 0) {
-            break;
-        }
+        /*  Frueher: hinter Bus 8 ohne Fund Schluss ("ein Brett mit
+         *  Bussen jenseits 8 und einer Luecke davor gibt es nicht").
+         *  Gibt es doch: Ryzen-APUs haengen ihre eigenen xHCI hinter
+         *  00:08.1 an einen hohen Bus (oft 0x0a), mit leeren Bussen
+         *  davor.  HP EliteDesk 705 G5: nur Chipsatz-xHCI und Realtek-
+         *  EHCI gefunden, die Front-Buchsen fehlten.  Alle 256 Busse
+         *  kosten 8192 Konfigurationszugriffe -- vernachlaessigbar.  */
+        (void)onbus;
     }
 }
 
@@ -494,7 +495,7 @@ NtuUnload (PDRIVER_OBJECT drv)
  *  Einrichten, Registry), liegt im auslagerbaren Abschnitt PAGE
  *  (nt/ntpaged.h, NTU_PAGED).  */
 #ifndef NTU_SETUP_WARTEN
-#define NTU_SETUP_WARTEN  15        /* Sekunden, nur im Textmodus-Setup */
+#define NTU_SETUP_WARTEN  30        /* Sekunden, nur im Textmodus-Setup */
 #endif
 NTSTATUS DriverEntry (PDRIVER_OBJECT drv, PUNICODE_STRING reg);
 #pragma alloc_text(INIT, DriverEntry)
@@ -708,6 +709,10 @@ DriverEntry (PDRIVER_OBJECT drv, PUNICODE_STRING reg)
         t.QuadPart = -2500000;                      /* 250 ms */
         for (z = 0; z < NTU_SETUP_WARTEN * 4 && ntum_cd_angelegt == 0; z += 1) {
             KeDelayExecutionThread(KernelMode, FALSE, &t);
+            if (z % 20 == 19) {
+                ntu_printf("usb: Setup: warte seit %u s, noch kein USB-CD/DVD\n",
+                           (z + 1) / 4);
+            }
         }
         if (ntum_cd_angelegt != 0) {
             /*  Etwas Nachlauf: ein zweites Laufwerk oder eine Tastatur am
@@ -717,6 +722,12 @@ DriverEntry (PDRIVER_OBJECT drv, PUNICODE_STRING reg)
         }
         ntu_printf("usb: Setup: %d USB-CD/DVD nach %u ms\n",
                    (int)ntum_cd_angelegt, z * 250);
+#ifdef NTU_SETUP_BILDSCHIRM
+        if (ntum_cd_angelegt == 0) {
+            extern VOID ntu_bildschirm_zusammenfassung (ULONG sekunden);
+            ntu_bildschirm_zusammenfassung(90);
+        }
+#endif
     }
 
     /*  Das Steuergeraet zuletzt: erst wenn die Tabelle steht, hat das

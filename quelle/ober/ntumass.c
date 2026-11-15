@@ -40,6 +40,12 @@
  *
  *  Grenzen: nur die erste primaere Partition (oder keine
  *  Partitionstabelle), nur 512-Byte-Sektoren, hoechstens 8 Einheiten.
+ *
+ *  CD/DVD-Laufwerke (INQUIRY: Geraetetyp 5): eigenes NT-Geraet
+ *  \\Device\\CdRomN vom Typ FILE_DEVICE_CD_ROM -- daran bindet sich
+ *  CDFS --, 2048-Byte-Sektoren, keine Partitionen, nur lesen.  Dazu die
+ *  CD-Steuercodes, die CDFS und Programme benutzen (Inhaltsverzeichnis,
+ *  letzte Sitzung, Geometrie, Pruefen, Sperren, Auswerfen).
  */
 
 #include <sys/param.h>
@@ -64,6 +70,21 @@
 #include <ntdddisk.h>
 
 #define NTUM_PUFFER       65536         /* je Uebertragung */
+
+/*  CD-Steuercodes (ntddcdrm.h des DDK), hier selbst gebildet -- die
+ *  Werte sind seit NT 3.1 dieselben.  */
+#define NTUM_CD(f, z)  CTL_CODE(FILE_DEVICE_CD_ROM, (f), METHOD_BUFFERED, (z))
+#define NTUM_CD_READ_TOC           NTUM_CD(0x0000, FILE_READ_ACCESS)
+#define NTUM_CD_GET_LAST_SESSION   NTUM_CD(0x000E, FILE_READ_ACCESS)
+#define NTUM_CD_GET_DRIVE_GEOMETRY NTUM_CD(0x0013, FILE_READ_ACCESS)
+#define NTUM_CD_CHECK_VERIFY       NTUM_CD(0x0200, FILE_READ_ACCESS)
+#define NTUM_CD_MEDIA_REMOVAL      NTUM_CD(0x0201, FILE_READ_ACCESS)
+#define NTUM_CD_EJECT_MEDIA        NTUM_CD(0x0202, FILE_READ_ACCESS)
+#define NTUM_CD_LOAD_MEDIA         NTUM_CD(0x0203, FILE_READ_ACCESS)
+#define NTUM_CD_RESERVE            NTUM_CD(0x0204, FILE_READ_ACCESS)
+#define NTUM_CD_RELEASE            NTUM_CD(0x0205, FILE_READ_ACCESS)
+#define NTUM_CD_FIND_NEW_DEVICES   NTUM_CD(0x0206, FILE_READ_ACCESS)
+#define NTUM_CD_TOC_GROESSE        804       /* sizeof(CDROM_TOC) */
 #define NTUM_ZEIT_BEFEHL  5000
 #define NTUM_ZEIT_DATEN   20000
 
@@ -98,6 +119,7 @@ typedef struct ntum_einheit {
     uint8_t               part_typ;
     char                  name[40];       /* Hersteller + Produkt */
     const char           *fremd;          /* Dateisystem, das NT 4.0 nicht kennt */
+    int                   cd;             /* Geraetetyp 5: CD/DVD */
     PDEVICE_OBJECT        nt;
 } ntum_einheit;
 
@@ -108,6 +130,7 @@ typedef struct ntum_erweiterung {
     LIST_ENTRY          Warteschlange;
     ULONG               Nummer;
     WCHAR               Buchstabe;
+    int                 Cd;          /* \\Device\\CdRomN statt UsbPlatteN */
 } ntum_erweiterung;
 
 typedef struct ntum_auftrag {
@@ -498,6 +521,8 @@ ntum_medium (ntum_einheit *E, int geduld)
     struct ntum_softc *sc = E->sc;
     uint8_t  cdb[10], d[36];
     uint32_t ist, k, versuche = geduld ? 20 : 3;
+    /*  Ein CD/DVD-Laufwerk braucht nach dem Einlegen gut 10-20 Sekunden,
+     *  bis die Scheibe laeuft und gelesen ist (02/04 "wird bereit").  */
     uint8_t *mbr = sc->sc_puffer;
 
     E->medium = 0;
@@ -509,6 +534,7 @@ ntum_medium (ntum_einheit *E, int geduld)
         memset(d, 0, sizeof(d));
 
         if (ntum_scsi(E, cdb, 6, 0, d, 36, &ist) == 0 && ist >= 36) {
+            E->cd = (d[0] & 0x1F) == 0x05;        /* CD/DVD (MMC) */
             for (k = 0; k < 24; k += 1) {
                 E->name[k] = (d[8 + k] >= 0x20 && d[8 + k] < 0x7F)
                            ? (char)d[8 + k] : ' ';
@@ -546,7 +572,17 @@ ntum_medium (ntum_einheit *E, int geduld)
         }
     }
 
-    if (k == versuche) {
+    if (k == versuche && E->cd && geduld) {
+        for (k = 0; k < 40; k += 1) {           /* noch bis 20 s */
+            memset(cdb, 0, sizeof(cdb));
+            if (ntum_scsi(E, cdb, 6, 0, NULL, 0, &ist) == 0) break;
+            if (sc->sc_weg) return 0;
+            if (!(sc->sc_sense[0] == 0x02 && sc->sc_sense[1] == 0x04) &&
+                sc->sc_sense[0] != 0x06) return 0;
+            ntu_pause_ticks(hz / 2);
+        }
+        if (k == 40) return 0;
+    } else if (k == versuche) {
         return 0;
     }
 
@@ -560,6 +596,23 @@ ntum_medium (ntum_einheit *E, int geduld)
 
     E->bloecke      = ((uint32_t)d[0] << 24 | d[1] << 16 | d[2] << 8 | d[3]) + 1;
     E->blockgroesse = (uint32_t)d[4] << 24 | d[5] << 16 | d[6] << 8 | d[7];
+
+    if (E->cd) {
+
+        /*  CD/DVD: immer 2048 Byte (Mode-1/Form-1-Nutzdaten).  Manche
+         *  Laufwerke melden bei Audio- oder gemischten Scheiben 2352;
+         *  gelesen wird mit READ(10) trotzdem in 2048er-Bloecken.  Keine
+         *  Partitionen, kein Bootsektor -- CDFS liest ab Sektor 16 selbst.  */
+
+        E->blockgroesse  = 2048;
+        E->schreibschutz = 1;
+        E->part_start    = 0;
+        E->part_laenge   = E->bloecke;
+        E->part_typ      = 0;
+        E->fremd         = 0;
+        E->medium        = 1;
+        return 1;
+    }
 
     if (E->blockgroesse != 512) {
         ntu_printf("umass: LUN %u Blockgroesse %u -- nur 512 unterstuetzt\n",
@@ -760,7 +813,10 @@ ntum_bericht (ntum_einheit *E, const char *was)
     ntum_erweiterung *x = E->nt ? (ntum_erweiterung *)E->nt->DeviceExtension : 0;
     char b = (x && x->Buchstabe) ? (char)x->Buchstabe : '?';
 
-    if (E->medium) {
+    if (E->medium && E->cd) {
+        ntu_printf("umass: %c: LUN %u %s  %s  CD/DVD, %u MB\n",
+                   b, E->lun, was, E->name, E->bloecke / 512);
+    } else if (E->medium) {
         ntu_printf("umass: %c: LUN %u %s  %s  %u MB%s, Partition ab %u, Typ %02x\n",
                    b, E->lun, was, E->name, E->bloecke / 2048,
                    E->schreibschutz ? " schreibgeschuetzt" : "",
@@ -804,7 +860,38 @@ ntum_nt_anlegen (ntum_einheit *E)
      *  bis zum letzten Verweis weiter -- IoCreateDevice scheitert dann an
      *  genau dieser Nummer.  In dem Fall die naechste nehmen.  */
 
-    for (n = 0; n < 16; n += 1) {
+    if (E->cd) {
+
+        /*  CD/DVD: \\Device\\CdRomN, wie cdrom.sys es anlegt -- so findet
+         *  jedes Programm (und Setup) das Laufwerk unter dem gewohnten
+         *  Namen.  N ab der Zahl der schon vorhandenen CD-Laufwerke;
+         *  CdRomCount danach hochzaehlen, wie es ein Klassentreiber tut.  */
+
+        PCONFIGURATION_INFORMATION ci = IoGetConfigurationInformation();
+        ULONG k0 = ci ? ci->CdRomCount : 0;
+
+        for (n = k0; n < k0 + 16; n += 1) {
+            ntu_wsprintf(dname, 32, L"\\Device\\CdRom%u", n);
+            RtlInitUnicodeString(&un, dname);
+            st = IoCreateDevice(NtuDriverObject, sizeof(ntum_erweiterung), &un,
+                                FILE_DEVICE_CD_ROM,
+                                FILE_REMOVABLE_MEDIA | FILE_READ_ONLY_DEVICE,
+                                FALSE, &dev);
+            if (NT_SUCCESS(st)) break;
+            if (st != STATUS_OBJECT_NAME_COLLISION) {
+                ntu_printf("umass: IoCreateDevice (CD) %08x\n", st);
+                return 0;
+            }
+        }
+        if (n == k0 + 16) {
+            return 0;
+        }
+        if (ci && ci->CdRomCount <= n) {
+            ci->CdRomCount = n + 1;
+        }
+    }
+
+    for (n = 0; !E->cd && n < 16; n += 1) {
 
         KeAcquireSpinLock(&ntum_belegt_sperre, &alt);
         if (ntum_belegt[n] != 0) {
@@ -836,7 +923,7 @@ ntum_nt_anlegen (ntum_einheit *E)
         }
     }
 
-    if (n == 16) {
+    if (!E->cd && n == 16) {
         return 0;
     }
 
@@ -845,13 +932,14 @@ ntum_nt_anlegen (ntum_einheit *E)
     x->Port.Kind   = NTU_PORT_PLATTE;
     x->Port.Suffix = n;
     x->Nummer      = n;
+    x->Cd          = E->cd;
     x->E           = E;
     KeInitializeSpinLock(&x->Sperre);
     InitializeListHead(&x->Warteschlange);
 
     dev->Flags         |= DO_DIRECT_IO;
     dev->AlignmentRequirement = FILE_WORD_ALIGNMENT;
-    dev->SectorSize     = 512;
+    dev->SectorSize     = E->cd ? 2048 : 512;
     dev->Flags         &= ~DO_DEVICE_INITIALIZING;
 
     /*  Laufwerksbuchstabe: der erste freie ab D:.  IoCreateSymbolicLink
@@ -915,7 +1003,9 @@ ntum_nt_abbauen (ntum_einheit *E)
 
     ntu_printf("umass: %c: abgezogen\n", x->Buchstabe ? (char)x->Buchstabe : '?');
 
-    ntum_belegt[x->Nummer] = 0;
+    if (!x->Cd) {
+        ntum_belegt[x->Nummer] = 0;
+    }
     IoDeleteDevice(dev);
     E->nt = 0;
 }
@@ -971,12 +1061,83 @@ ntum_irp (PDEVICE_OBJECT dev, PIRP irp)
     return STATUS_PENDING;
 }
 
+/*  Im Arbeitsfaden: READ TOC fuer IOCTL_CDROM_READ_TOC (Format 0,
+ *  MSF-Adressen -- so liefert es cdrom.sys, und so erwartet es CDFS) und
+ *  IOCTL_CDROM_GET_LAST_SESSION (Format 1, LBA).  Die Antwort des
+ *  Laufwerks hat schon den Aufbau von CDROM_TOC bzw.
+ *  CDROM_TOC_SESSION_DATA; sie wird unveraendert weitergereicht.
+ *  EJECT/LOAD: START STOP UNIT mit LoEj.  */
+
+static void
+ntum_cd_befehl (ntum_einheit *E, PIRP irp)
+{
+    struct ntum_softc *sc = E->sc;
+    PIO_STACK_LOCATION sl = IoGetCurrentIrpStackLocation(irp);
+    ULONG              code = sl->Parameters.DeviceIoControl.IoControlCode;
+    ULONG              aus  = sl->Parameters.DeviceIoControl.OutputBufferLength;
+    uint8_t            cdb[10];
+    uint32_t           ist = 0, soll;
+    int                r;
+
+    memset(cdb, 0, sizeof(cdb));
+
+    if (code == NTUM_CD_EJECT_MEDIA || code == NTUM_CD_LOAD_MEDIA) {
+        cdb[0] = 0x1B;                              /* START STOP UNIT */
+        cdb[4] = (code == NTUM_CD_EJECT_MEDIA) ? 0x02 : 0x03;
+        r = ntum_scsi(E, cdb, 6, 0, NULL, 0, &ist);
+        if (code == NTUM_CD_EJECT_MEDIA && r == 0) {
+            E->medium = 0;
+            ntum_verify(E);
+        }
+        ntum_fertig(irp, r == 0 ? STATUS_SUCCESS : STATUS_IO_DEVICE_ERROR, 0);
+        return;
+    }
+
+    if (!E->medium) {
+        ntum_fertig(irp, STATUS_NO_MEDIA_IN_DEVICE, 0);
+        return;
+    }
+
+    soll = (code == NTUM_CD_READ_TOC) ? NTUM_CD_TOC_GROESSE : 12;
+    if (aus < 4) {
+        ntum_fertig(irp, STATUS_BUFFER_TOO_SMALL, 0);
+        return;
+    }
+    if (soll > aus) soll = aus;
+
+    cdb[0] = 0x43;                                  /* READ TOC */
+    cdb[1] = (code == NTUM_CD_READ_TOC) ? 0x02 : 0x00;   /* MSF */
+    cdb[2] = (code == NTUM_CD_READ_TOC) ? 0x00 : 0x01;   /* Format */
+    cdb[7] = (uint8_t)(soll >> 8);
+    cdb[8] = (uint8_t)soll;
+
+    memset(sc->sc_puffer, 0, soll);
+    r = ntum_scsi(E, cdb, 10, 0, sc->sc_puffer, soll, &ist);
+
+    if (r != 0 || ist < 4) {
+        ntum_fertig(irp, ntum_leer(sc) ? STATUS_NO_MEDIA_IN_DEVICE
+                                       : STATUS_IO_DEVICE_ERROR, 0);
+        return;
+    }
+
+    if (ist > soll) ist = soll;
+    memcpy(irp->AssociatedIrp.SystemBuffer, sc->sc_puffer, ist);
+    ntum_fertig(irp, STATUS_SUCCESS, ist);
+}
+
 static void
 ntum_bearbeiten (ntum_einheit *E, PIRP irp)
 {
     struct ntum_softc *sc = E->sc;
     PIO_STACK_LOCATION sl = IoGetCurrentIrpStackLocation(irp);
     int                schreiben = (sl->MajorFunction == IRP_MJ_WRITE);
+
+    if (sl->MajorFunction == IRP_MJ_DEVICE_CONTROL) {
+        ntum_cd_befehl(E, irp);
+        return;
+    }
+
+    {
     LONGLONG           ab   = schreiben ? sl->Parameters.Write.ByteOffset.QuadPart
                                         : sl->Parameters.Read.ByteOffset.QuadPart;
     ULONG              lang = schreiben ? sl->Parameters.Write.Length
@@ -1057,6 +1218,7 @@ ntum_bearbeiten (ntum_einheit *E, PIRP irp)
     }
 
     ntum_fertig(irp, STATUS_SUCCESS, lang);
+    }
 }
 
 NTSTATUS
@@ -1088,6 +1250,36 @@ ntum_ioctl (PDEVICE_OBJECT dev, PIRP irp)
 
     switch (sl->Parameters.DeviceIoControl.IoControlCode) {
 
+        /*  CD/DVD -- Befehle an das Laufwerk gehen durch den Arbeitsfaden.  */
+
+        case NTUM_CD_READ_TOC:
+        case NTUM_CD_GET_LAST_SESSION:
+        case NTUM_CD_EJECT_MEDIA:
+        case NTUM_CD_LOAD_MEDIA:
+            if (!x->Cd) {
+                return ntum_fertig(irp, STATUS_INVALID_DEVICE_REQUEST, 0);
+            }
+            return ntum_irp(dev, irp);
+
+        case NTUM_CD_GET_DRIVE_GEOMETRY: {
+
+            DISK_GEOMETRY *g = (DISK_GEOMETRY *)p;
+
+            if (aus < sizeof(*g)) {
+                return ntum_fertig(irp, STATUS_BUFFER_TOO_SMALL, 0);
+            }
+            if (!medium) {
+                return ntum_fertig(irp, STATUS_NO_MEDIA_IN_DEVICE, 0);
+            }
+            g->MediaType          = RemovableMedia;
+            g->TracksPerCylinder  = 64;             /* wie cdrom.sys */
+            g->SectorsPerTrack    = 32;
+            g->BytesPerSector     = 2048;
+            g->Cylinders.QuadPart = (bloecke / (64 * 32)) ? (bloecke / (64 * 32)) : 1;
+            return ntum_fertig(irp, STATUS_SUCCESS, sizeof(*g));
+        }
+
+        case NTUM_CD_CHECK_VERIFY:
         case IOCTL_DISK_CHECK_VERIFY:
 
             /*  Wie disk.sys: steht DO_VERIFY_VOLUME, erst "Pruefung
@@ -1155,6 +1347,12 @@ ntum_ioctl (PDEVICE_OBJECT dev, PIRP irp)
             }
             return ntum_fertig(irp, schutz ? STATUS_MEDIA_WRITE_PROTECTED
                                            : STATUS_SUCCESS, 0);
+
+        case NTUM_CD_MEDIA_REMOVAL:
+        case NTUM_CD_RESERVE:
+        case NTUM_CD_RELEASE:
+        case NTUM_CD_FIND_NEW_DEVICES:
+            return ntum_fertig(irp, STATUS_SUCCESS, 0);
 
         case IOCTL_DISK_VERIFY:
         case IOCTL_DISK_SET_PARTITION_INFO:

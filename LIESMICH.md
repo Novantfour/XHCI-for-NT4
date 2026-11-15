@@ -64,6 +64,7 @@ Die genaue Beschreibung aller Befehle steht in `installer/LIESMICH.TXT`.
 | **Tastatur** | wie eine normale Tastatur. Tastenwiederholung, Num/Caps/Scroll-LEDs |
 | **Maus** | wie eine normale Maus, mit Rad. Tasten 1–8 frei belegbar |
 | **USB-Stick, Festplatte, Kartenleser** | als Laufwerk (FAT16, NTFS), sicher auswerfen mit `USBGERAET auswerfen E:` |
+| **CD-/DVD-Laufwerk** | als `\Device\CdRomN` mit Laufwerksbuchstaben, gelesen über CDFS wie ein eingebautes Laufwerk (ab Fassung 2026.11.15) |
 | **Drucker** | als Anschluss `USBPRN1`, `USBPRN2`, …; im Druckermanager als „lokaler Anschluss" wählbar. Mit Rückkanal (Status, PJL) |
 | **Gamepads** | HID-Gamepads, Xbox-360- und Xbox-One-Controller. Für Spiele über den Joystick-Treiber von Windows, mit Systemsteuerung „USB-Gamepads" |
 | **alle anderen Geräte** | als rohes Gerät `\\.\UsbDev0`, `\\.\UsbDev1`, … – für eigene Programme (siehe unten) |
@@ -75,6 +76,16 @@ SuperSpeed.
 **Mehrprozessor:** geprüft mit dem Mehrprozessor-Kern `ntkrnlmp` auf zwei
 Prozessoren. Eine NT 4.0 **Workstation** nutzt höchstens zwei Prozessoren,
 auch auf einem Rechner mit mehr Kernen.
+
+### Gleich bei der Installation von NT 4.0
+
+`cd-einbindung/usb_einbinden.py` baut den Treiber in eine NT-4.0-Installations-CD
+ein: `USBNT.SYS` nach `I386` und in `TXTSETUP.SIF`, der Dienst samt
+`ConnectMultiplePorts` direkt in die Registry-Vorlage `I386\SYSTEM`, die
+Werkzeuge nach `\USBNT`.  Das installierte System kann USB dann ab dem ersten
+Start, also schon im grafischen Teil von Setup (Tastatur, Maus, Stick, CD/DVD).
+Im Textteil von Setup arbeitet weiter das BIOS (USB-Tastatur über dessen
+PS/2-Nachbildung); von einem USB-DVD-Laufwerk installieren geht deshalb noch nicht.
 
 ---
 

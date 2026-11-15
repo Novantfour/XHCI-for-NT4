@@ -59,9 +59,9 @@ usbaudio:audio:ober/ntuaudio.c,audio/ntaudio.c:USB-Audio (UAC1), Wiedergabe"
 OBER=$(ls $UNT/ober/*.c | grep -v '/ntujoy\.c$' | grep -v '/ntuaudio\.c$')
 for f in $LISTE $SRC/dev/hid/*.c $HCD $UNT/nt/*.c $OBER; do
   o=$OBJ/$(basename $f .c).obj
-  if clang-cl $CF $CI "$f" -Fo$o 2>/dev/null; then ok=$((ok+1)); else
+  if ${CLANGCL:-clang-cl} $CF $CI "$f" -Fo$o 2>/dev/null; then ok=$((ok+1)); else
     bad=$((bad+1)); echo "### $(basename $f)"
-    clang-cl $CF $CI "$f" -Fo$o 2>&1 | grep -E "error" | head -4
+    ${CLANGCL:-clang-cl} $CF $CI "$f" -Fo$o 2>&1 | grep -E "error" | head -4
   fi
 done
 echo "uebersetzt: $ok   gescheitert: $bad"
@@ -69,7 +69,7 @@ echo "uebersetzt: $ok   gescheitert: $bad"
 
 # Einfuhrbibliotheken.  Die des DDK lassen sich mit lld-link nicht
 # binden -- der Grund steht in einfuhrlib.py.
-python3 einfuhrlib.py $DDK $OBJ
+[ -z "$FREI_KERN" ] && python3 einfuhrlib.py $DDK $OBJ
 
 # Dazu KiSerialPutString: der 1017. Export des selbstgebauten Kernels
 # steht in keiner NTOSKRNL.LIB, die Microsoft ausgeliefert hat.
@@ -119,7 +119,7 @@ BEGIN
   END
 END
 RC
-i686-w64-mingw32-windres $OBJ/version.rc -O coff -o $OBJ/zz_version.obj || exit 1
+${WINDRES:-i686-w64-mingw32-windres} $OBJ/version.rc -O coff -o $OBJ/zz_version.obj || exit 1
 
 # ---- USBXBOX.SYS uebersetzen und die Exportliste von usbnt.sys bilden ----
 # Exportiert wird genau, was die Objekte von USBXBOX offen lassen und die
@@ -128,7 +128,7 @@ ZOBJ=$OBJ/zusatz; rm -rf $ZOBJ; mkdir -p $ZOBJ
 echo "$ZUSATZ" | while IFS=: read zn zv zd zb; do
   mkdir -p $ZOBJ/$zv
   for f in $(echo $zd | tr , ' '); do
-    clang-cl $CF $CI "$UNT/$f" -Fo$ZOBJ/$zv/$(basename $f .c).obj 2>&1 | grep -E "error" | head -4
+    ${CLANGCL:-clang-cl} $CF $CI "$UNT/$f" -Fo$ZOBJ/$zv/$(basename $f .c).obj 2>&1 | grep -E "error" | head -4
   done
 done
 python3 - "$OBJ" "$ZOBJ" <<'PY'
@@ -155,6 +155,9 @@ open(xobj + '/usbnt-imp.def', 'w').write('LIBRARY usbnt.sys\nEXPORTS\n' +
 print('Stapel exportiert %d Namen fuer die Zusatztreiber' % len(exp))
 PY
 llvm-dlltool-18 -m i386 -k -d $ZOBJ/usbnt-imp.def -l $ZOBJ/usbnt.lib || exit 1
+# Ohne DDK (bau-frei.sh): Einfuhrbibliotheken aus den tatsaechlichen Einfuhren,
+# gegen die Exportlisten eines echten NT-4.0-Kerns und HAL geprueft.
+[ -n "$FREI_KERN" ] && { python3 einfuhrlib_frei.py $OBJ $FREI_KERN $FREI_HAL $OBJ || exit 1; }
 
 lld-link /out:$ZIEL /machine:x86 /subsystem:native,4.00 /driver \
   /def:$OBJ/usbnt.def /implib:$OBJ/usbnt-lld.lib \
@@ -188,7 +191,7 @@ if [ -z "$NUR" ]; then
         -e "s/\"InternalName\", \"[^\"]*\"/\"InternalName\", \"$zn\"/" \
         -e "s/\"OriginalFilename\", \"[^\"]*\"/\"OriginalFilename\", \"$zn.sys\"/" \
         $OBJ/version.rc > $ZOBJ/$zv/version.rc
-    i686-w64-mingw32-windres $ZOBJ/$zv/version.rc -O coff -o $ZOBJ/$zv/zz_version.obj || exit 1
+    ${WINDRES:-i686-w64-mingw32-windres} $ZOBJ/$zv/version.rc -O coff -o $ZOBJ/$zv/zz_version.obj || exit 1
     lld-link /out:$zn.sys /machine:x86 /subsystem:native,4.00 /driver \
       /entry:DriverEntry@8 /nodefaultlib /safeseh:no \
       /merge:NTUDRV=.rdata /ignore:4078 /base:0x10000 /release \

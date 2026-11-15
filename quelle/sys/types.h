@@ -36,9 +36,18 @@ typedef unsigned int       u_int;
 typedef unsigned long      u_long;
 
 typedef int                ssize_t;
+#ifndef _SIZE_T_DEFINED
+#define _SIZE_T_DEFINED
 typedef unsigned int       size_t;
+#endif
+#ifndef _UINTPTR_T_DEFINED   /* freie DDK-Koepfe (mingw-w64) bringen sie schon mit */
+#define _UINTPTR_T_DEFINED
 typedef ULONG_PTR          uintptr_t;
+#endif
+#ifndef _INTPTR_T_DEFINED
+#define _INTPTR_T_DEFINED
 typedef LONG_PTR           intptr_t;
+#endif
 typedef uint64_t           off_t;
 typedef char              *caddr_t;
 typedef unsigned int       uid_t;

@@ -1976,3 +1976,54 @@ d. UHCI: HSE und HCPE sind nicht ueber USBINTR sperrbar.  Zwischen ISR
 Gebaut: usbnt.sys, uhcint/ohcint/ehcint/xhcint.sys als 2026.11.11.2 in
 bin/ungeprueft-2026.11.11.2/treiber, pruefe-bau.py ohne Maengel.
 NICHT gelaufen.  Installer und bin/treiber bleiben 2026.10.11.4.
+
+
+## Fassung 2026.11.15.52: CD/DVD-Laufwerke, Bau ohne DDK, Einbindung in die Installations-CD
+
+**USB-CD/DVD-Laufwerke** (ober/ntumass.c).  Bisher lehnte der
+Massenspeicher-Teil alles ausser 512-Byte-Sektoren ab.  Jetzt:
+- INQUIRY Geraetetyp 5 -> eigenes NT-Geraet `\Device\CdRomN`
+  (FILE_DEVICE_CD_ROM, FILE_READ_ONLY_DEVICE), N ab
+  IoGetConfigurationInformation()->CdRomCount, das danach hochgezaehlt
+  wird -- wie bei cdrom.sys.  Laufwerksbuchstabe wie bei den Platten.
+- 2048-Byte-Bloecke, keine Partitionen, schreibgeschuetzt; CDFS bindet sich
+  am VPB an.  Beim Einstecken bis zu 20 s zusaetzlich auf "wird bereit"
+  (02/04) warten -- die Scheibe muss anlaufen.
+- Steuercodes: IOCTL_CDROM_READ_TOC (READ TOC Format 0, MSF),
+  GET_LAST_SESSION (Format 1, LBA) -- beide durch den Arbeitsfaden, damit
+  sie sich nicht mit laufenden Bulk-Uebertragungen mischen;
+  GET_DRIVE_GEOMETRY (2048, 64x32), CHECK_VERIFY wie bei Platten,
+  EJECT/LOAD per START STOP UNIT, MEDIA_REMOVAL/RESERVE/RELEASE.
+- Geprueft (QEMU, usb-bot + scsi-cd, an xHCI und an EHCI):
+  `umass: F: LUN 0 = QEMU QEMU CD-ROM CD/DVD`, `dir F:` zeigt die
+  Scheibe, `type F:\USBCD.TXT` liest die Datei.
+
+**Bau ohne NT-4.0-DDK** (bau-frei.sh, einfuhrlib_frei.py,
+quelle/nt/ntfreiekoepfe.h).  Mit den freien DDK-Koepfen von mingw-w64.
+Die Einfuhrbibliotheken entstehen aus den tatsaechlichen Einfuhren der
+Objekte und werden gegen die Exportliste eines echten NT-4.0-Kerns und HAL
+geprueft -- was NT 4.0 nicht hat, bricht den Bau ab.  Ergebnis gegen den
+DDK-Bau 2026.10.10.1 verglichen: gleiche Abschnitte, Groesse +-1 kB, gleiche
+Einfuhren bis auf fuenf (Interlocked*, KeInitializeSpinLock jetzt als
+eingebaute Befehle).  Wichtig dabei: clang-cl gilt fuer die mingw-Koepfe
+nicht als GNU-C, die streichen dann `__attribute__` -- und damit `packed`.
+Deshalb `-fgnuc-version`.
+
+**Einbindung in die Installations-CD** (cd-einbindung/usb_einbinden.py),
+ausprobiert mit der reinen NT 4.0 Server Enterprise (deutsch, ohne SP;
+Kern laeuft also auch auf RTM):
+Textsetup kopiert usbnt.sys, die Registry-Vorlage traegt den Dienst.
+Erster Start (Umwandlung nach NTFS) und grafischer Teil schon mit USB;
+Tastatur-Eingaben im grafischen Teil kamen ueber die USB-Tastatur,
+Anmeldung (Strg+Alt+Entf) ueber eine USB-Tastatur, die an die Konsole
+gebunden war (PS/2 bekam nichts).  Stick D:/E:, CD E:/F:, Maus klickt.
+Controller: xHCI (qemu-xhci), EHCI (ICH4) und UHCI (PIIX3).
+
+Bemerkt: "uhub_explore: illegal enable change, port 1" einmal nach dem
+Anmelden an xHCI; Tastatur arbeitete weiter.
+
+Gebaut aus dem Repo-Stand 2026.11.11.2 + obige Aenderungen als
+2026.11.15.52 in bin/2026.11.15.52 (mit bau-frei.sh).  Dieser Bau ist
+in QEMU gestartet (xHCI, alle vier Geraete erkannt, bis Anmeldung);
+der volle Durchlauf oben lief mit dem gleichen ntumass.c auf dem Stand des
+Pakets usb-nt4-komplett30.  Installer und bin/treiber unveraendert.

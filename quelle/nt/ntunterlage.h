@@ -50,6 +50,9 @@
 
 #include <ntddk.h>
 #include <stdarg.h>
+#ifdef NTU_FREIE_KOEPFE
+#include "ntfreiekoepfe.h"
+#endif
 
 /*  ULONG_PTR und LONG_PTR gibt es im NT-4.0-DDK noch nicht -- sie kamen
  *  erst mit der Vorbereitung auf 64 Bit.  Auf i386 sind sie genau so

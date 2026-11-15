@@ -167,6 +167,11 @@ static LONG       ntum_belegt[16];
 static KSPIN_LOCK ntum_belegt_sperre;
 static int        ntum_bereit;
 
+/*  Zahl der bisher angelegten CD/DVD-Geraete.  DriverEntry (ntusbnt.c)
+ *  wartet im Textmodus-Setup darauf: NT vergibt die ARC-Namen gleich nach
+ *  den Starttreibern, und Setup braucht multi(0)disk(0)cdrom(N).  */
+volatile LONG      ntum_cd_angelegt;
+
 
 /* ====================================================================
  *  Bulk -- synchron, auf zwei gehaltenen Uebertragungen
@@ -838,6 +843,52 @@ ntum_bericht (ntum_einheit *E, const char *was)
  *  Das NT-Plattengeraet
  * ==================================================================== */
 
+/*  CD-Dateisystem nachladen.
+ *
+ *  Textmodus-Setup schaltet den Dienst Cdfs ab (Start 4), wenn cdrom.sys
+ *  kein Laufwerk gefunden hat -- und ein USB-Laufwerk meldet sich nicht
+ *  ueber cdrom.sys, sondern ueber uns.  Das grafische Setup schaltet ihn
+ *  bei jedem Start wieder ab.  Ohne Cdfs bindet NT die Scheibe als RAW
+ *  ein, und jeder Zugriff endet mit "Der Parameter stimmt nicht".
+ *
+ *  Also: sobald es ein USB-CD-Laufwerk gibt, nachsehen, ob \Cdfs da ist,
+ *  und den Treiber sonst laden.  ZwLoadDriver achtet nicht auf Start; das
+ *  tut nur der Dienststeuerungs-Manager.  Im Arbeitsauftrag, weil
+ *  ZwLoadDriver selbst einen Arbeitsfaden bemueht und wartet.  */
+
+static WORK_QUEUE_ITEM ntum_cdfs_arbeit;
+static LONG            ntum_cdfs_angestossen;
+
+static VOID
+ntum_cdfs_laden (PVOID kontext)
+{
+    UNICODE_STRING n;
+    PFILE_OBJECT   fo  = 0;
+    PDEVICE_OBJECT dev = 0;
+    NTSTATUS       st;
+
+    (void)kontext;
+    RtlInitUnicodeString(&n, L"\\Cdfs");
+    if (NT_SUCCESS(IoGetDeviceObjectPointer(&n, FILE_READ_ATTRIBUTES, &fo, &dev))) {
+        ObDereferenceObject(fo);
+        return;                                 /* laeuft schon */
+    }
+    RtlInitUnicodeString(&n, L"\\Registry\\Machine\\System\\"
+                             L"CurrentControlSet\\Services\\Cdfs");
+    st = ZwLoadDriver(&n);
+    ntu_printf("umass: Cdfs nachgeladen: %08x\n", st);
+}
+
+static void
+ntum_cdfs_sicherstellen (void)
+{
+    if (InterlockedExchange(&ntum_cdfs_angestossen, 1) != 0) {
+        return;
+    }
+    ExInitializeWorkItem(&ntum_cdfs_arbeit, ntum_cdfs_laden, 0);
+    ExQueueWorkItem(&ntum_cdfs_arbeit, DelayedWorkQueue);
+}
+
 static int
 ntum_nt_anlegen (ntum_einheit *E)
 {
@@ -889,6 +940,8 @@ ntum_nt_anlegen (ntum_einheit *E)
         if (ci && ci->CdRomCount <= n) {
             ci->CdRomCount = n + 1;
         }
+        InterlockedIncrement((PLONG)&ntum_cd_angelegt);
+        ntum_cdfs_sicherstellen();
     }
 
     for (n = 0; !E->cd && n < 16; n += 1) {

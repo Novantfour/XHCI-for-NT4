@@ -16,6 +16,14 @@ einbinden, so dass das installierte System USB von Anfang an kann
        Services\\Mouclass\\Parameters\\ConnectMultiplePorts = 1
      Danach lh -> lf (hivex legt lh an; NT 4.0 kennt nur lf).
   3. Die Werkzeuge (USBINST, USBGERAET, Geraetemanager ...) nach \\USBNT.
+  4. Textmodus-Setup (Start vom USB-CD/DVD-Laufwerk, USB-Tastatur):
+       TXTSETUP.SIF [Extenders.Load]  usbnt = usbnt.sys,4
+         -> SETUPLDR laedt usbnt als Starttreiber; usbnt wartet im Setup
+            (Dienst setupdd vorhanden) bis zu 15 s auf das USB-Laufwerk,
+            damit NT den ARC-Namen multi(0)disk(0)cdrom(N) anlegen kann.
+       SETUPREG.HIV  Kbdclass/Mouclass\\Parameters MaximumPortsServiced 2,
+                     ConnectMultiplePorts 1 (USB- und PS/2-Tastatur),
+                     usbnt\\Parameters Ausgabe 0
 """
 import sys, os, shutil, struct, hivex
 
@@ -88,4 +96,20 @@ ziel = os.path.join(cd, 'USBNT')
 if os.path.exists(ziel): shutil.rmtree(ziel)
 shutil.copytree(werkzeug, ziel)
 shutil.copyfile(sysdatei, os.path.join(ziel, 'USBNT.SYS'))
+# 4. Textmodus-Setup
+d = open(sif, 'rb').read()
+marke = b'[Extenders.Load]\r\npcmcia = pcmcia.sys,4\r\n'
+assert marke in d, '[Extenders.Load] nicht gefunden'
+if b'usbnt  = usbnt.sys' not in d:
+    d = d.replace(marke, marke + b'usbnt  = usbnt.sys,4\r\n')
+    open(sif, 'wb').write(d)
+sreg = os.path.join(i386, 'SETUPREG.HIV')
+tmp = sreg + '.neu'; shutil.copyfile(sreg, tmp); os.replace(tmp, sreg)   # Hardlink loesen
+h = hivex.Hivex(sreg, write=True)
+for k in ('Kbdclass', 'Mouclass'):
+    p = knoten('ControlSet001\\Services\\%s\\Parameters' % k)
+    dw(p, 'MaximumPortsServiced', 2); dw(p, 'ConnectMultiplePorts', 1)
+dw(knoten('ControlSet001\\Services\\usbnt\\Parameters'), 'Ausgabe', int(os.environ.get('AUSGABE', '0')))
+h.commit(None); del h
+print('SETUPREG lh->lf:', lh_nach_lf(sreg))
 print('fertig')

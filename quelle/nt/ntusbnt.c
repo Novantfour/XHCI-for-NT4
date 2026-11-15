@@ -493,6 +493,9 @@ NtuUnload (PDRIVER_OBJECT drv)
  *  und DPC-Pfad arbeitet.  Was nachweislich NUR passiv laeuft (Entladen,
  *  Einrichten, Registry), liegt im auslagerbaren Abschnitt PAGE
  *  (nt/ntpaged.h, NTU_PAGED).  */
+#ifndef NTU_SETUP_WARTEN
+#define NTU_SETUP_WARTEN  15        /* Sekunden, nur im Textmodus-Setup */
+#endif
 NTSTATUS DriverEntry (PDRIVER_OBJECT drv, PUNICODE_STRING reg);
 #pragma alloc_text(INIT, DriverEntry)
 
@@ -533,6 +536,9 @@ DriverEntry (PDRIVER_OBJECT drv, PUNICODE_STRING reg)
             }
         }
 
+#ifdef NTU_AUSGABE_IMMER
+        wert = 1;                   /* Diagnosefassung: immer COM1 */
+#endif
         ntu_uart_basis = (wert == 0) ? 0 :
                          (wert == 1) ? 0x3F8 :
                          (wert == 2) ? 0x2F8 : wert;
@@ -667,6 +673,40 @@ DriverEntry (PDRIVER_OBJECT drv, PUNICODE_STRING reg)
 
     ntu_printf("usb: %u Hostbausteine\n", ntu_hc_count);
     ntu_attach_all();
+
+    /*  Textmodus-Setup vom USB-DVD-Laufwerk.
+     *
+     *  Gleich nach den Starttreibern legt NT die ARC-Namen an
+     *  (IopCreateArcNames).  Fuer eine gestartete CD sucht es dabei unter
+     *  den vorhandenen \Device\CdRomN das Laufwerk mit der Startscheibe;
+     *  Setup oeffnet danach \ArcName\multi(0)disk(0)cdrom(N).  Unsere
+     *  Aufzaehlung laeuft aber im Hintergrund -- kehren wir sofort zurueck,
+     *  gibt es das Laufwerk noch nicht, und Setup endet mit Stop 0x7B
+     *  (0xC0000034).  Also im Setup warten, bis ein USB-CD-Laufwerk
+     *  angelegt ist, hoechstens NTU_SETUP_WARTEN Sekunden.
+     *
+     *  Setup erkennt man am Dienst setupdd: den gibt es nur in der
+     *  Registry des Textmodus-Setups.  Im installierten System wird nie
+     *  gewartet.  */
+    if (ntu_hc_count != 0 &&
+        NT_SUCCESS(RtlCheckRegistryKey(RTL_REGISTRY_SERVICES, L"setupdd"))) {
+        extern volatile LONG ntum_cd_angelegt;
+        LARGE_INTEGER t;
+        ULONG z;
+        ntu_printf("usb: Textmodus-Setup -- warte auf USB-CD/DVD\n");
+        t.QuadPart = -2500000;                      /* 250 ms */
+        for (z = 0; z < NTU_SETUP_WARTEN * 4 && ntum_cd_angelegt == 0; z += 1) {
+            KeDelayExecutionThread(KernelMode, FALSE, &t);
+        }
+        if (ntum_cd_angelegt != 0) {
+            /*  Etwas Nachlauf: ein zweites Laufwerk oder eine Tastatur am
+             *  selben Hub haengt meist gleich danach an.  */
+            t.QuadPart = -10000000;                 /* 1 s */
+            KeDelayExecutionThread(KernelMode, FALSE, &t);
+        }
+        ntu_printf("usb: Setup: %d USB-CD/DVD nach %u ms\n",
+                   (int)ntum_cd_angelegt, z * 250);
+    }
 
     /*  Das Steuergeraet zuletzt: erst wenn die Tabelle steht, hat das
      *  Werkzeug etwas zu lesen.  Scheitert es, laeuft der Treiber

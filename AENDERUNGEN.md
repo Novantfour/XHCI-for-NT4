@@ -1,3 +1,37 @@
+# Fassung 2026.11.15.54 -- Installation vom USB-DVD-Laufwerk
+
+Gefunden auf einem HP EliteDesk 705 G5 (Ryzen, kein eingebautes
+Laufwerk): Textmodus-Setup vom USB-DVD-Laufwerk endete mit Stop 0x7B
+(0xC0000034).  In QEMU nachgestellt (xHCI, usb-bot + scsi-cd, kein
+SATA-Laufwerk): Setup sucht `\ArcName\multi(0)disk(0)cdrom(224)`.
+
+**Im Textmodus laden.**  `TXTSETUP.SIF [Extenders.Load]` bekommt
+`usbnt = usbnt.sys,4`; SETUPLDR laedt den Treiber als Starttreiber.
+
+**Auf das Laufwerk warten -- nur im Setup.**  NT legt die ARC-Namen
+gleich nach den Starttreibern an (IopCreateArcNames); unsere Aufzaehlung
+laeuft im Hintergrund.  `DriverEntry` wartet deshalb, wenn der Dienst
+`setupdd` existiert (gibt es nur in der Textmodus-Registry), bis ein
+USB-CD-Laufwerk angelegt ist, hoechstens 15 s (`NTU_SETUP_WARTEN`).
+In QEMU nach 1,25 s da.  Im installierten System wird nie gewartet.
+
+**Tastatur im Setup.**  `SETUPREG.HIV` kennt kbdclass ohne Parameter
+(nur KeyboardPort0).  usbnt startet vor i8042prt und bekommt die 0 --
+eine PS/2-Tastatur waere verloren.  Daher dort `MaximumPortsServiced 2`,
+`ConnectMultiplePorts 1` (auch Mouclass).
+
+**CD-Dateisystem nachladen.**  Setup schaltet `Cdfs` ab (Start 4), wenn
+cdrom.sys kein Laufwerk findet -- das grafische Setup bei jedem Start
+erneut.  Ohne Cdfs wird die Scheibe RAW: "Der Parameter stimmt nicht".
+ntumass laedt jetzt beim ersten CD-Laufwerk `Cdfs` per `ZwLoadDriver`
+nach, falls `\Cdfs` fehlt (Arbeitsauftrag).  Hilft auch im
+installierten System ohne SATA-/IDE-Laufwerk.
+
+Getestet in QEMU (q35, xHCI, nur USB-DVD, USB-Tastatur an die Konsole
+gebunden, USB-Maus aktiv): Textmodus, Kopieren, GUI-Setup, Anmeldung,
+Explorer auf D:\I386 -- vollstaendig ohne PS/2-Eingaben und ohne
+SATA-Laufwerk.  `cd-einbindung/usb_einbinden.py` macht alle Schritte.
+
 # Was der QEMU-Lauf gefunden und geaendert hat
 
 Getestet gegen ein echtes NT 4.0 SP6 (das hochgeladene Abbild) mit

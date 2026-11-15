@@ -358,6 +358,14 @@ typedef struct ntu_intr {
     ULONG              Fremd;       /* je Baustein: abgewiesen    */
     ULONG              FremdGesp;   /* davon, weil gesperrt       */
     volatile LONG      Stop;
+
+    /*  Abfragebetrieb: keine nutzbare Leitung (BIOS liess 0/255 stehen,
+     *  oder die Leitung passt nicht zur HAL, etwa APIC-Nummer 31 unter
+     *  der PIC-HAL).  Dann weckt ein Zeitgeber den Faden; der FreeBSD-
+     *  Handler prueft den Baustein ohnehin selbst.  */
+    ULONG              Abfrage;
+    KTIMER             Takt;
+    KDPC               TaktDpc;
 } ntu_intr;
 
 /*  Die letzten Unterbrechungen, so wie der ISR sie vorgefunden hat.

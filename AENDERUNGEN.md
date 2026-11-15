@@ -1,3 +1,32 @@
+# Fassung 2026.11.15.56 -- Abfragebetrieb ohne IRQ-Leitung
+
+HP EliteDesk 705 G5 (Ryzen 5 PRO 3400GE, CSM): Setup blieb nach dem
+Startbanner stehen.  Bildschirmdiagnose (neu, siehe unten) zeigte:
+
+    usb: 01:00.0  1022:43d2  xhci  irq 255
+    usb: 05:00.4  10ec:816d  ehci  irq 31
+    usb: IoConnectInterrupt auf Leitung 31: c000000d
+
+Das BIOS traegt im CSM-Betrieb nur noch APIC-Leitungen ein (31) oder
+gar keine (255).  Unter der PIC-HAL ist beides nicht anschliessbar; der
+Treiber brach das Einrichten ab und blieb im Abbau haengen.
+
+**Abfragebetrieb.**  Ist die Leitung 0/255, liefert HalGetInterruptVector
+nichts oder schlaegt IoConnectInterrupt fehl, weckt ein periodischer
+Zeitgeber (KeSetTimerEx, Systemtakt 10-15 ms; ExSetTimerResolution gibt
+es in NT 4.0 nicht) den Unterbrechungsfaden.  Der FreeBSD-Handler prueft
+den Baustein ohnehin selbst; Sperren/Freigeben entfaellt.  Die
+ResourceMap meldet dann keinen Interrupt.  Pruefstand: mit
+`-DNTU_ABFRAGE_ERZWINGEN=1` in QEMU erzwungen -- Textmodus-Setup,
+Kopieren und GUI-Setup vom USB-DVD-Laufwerk laufen.
+
+**Bildschirmdiagnose.**  Mit `-DNTU_SETUP_BILDSCHIRM` schreibt der
+Treiber im Textmodus-Setup jede Zeile mit Zeitstempel per
+HalDisplayString unter das Startbanner -- fuer Rechner ohne COM.
+
+**"noname" in der Statuszeile.**  `[Extenders]` bekommt
+`usbnt = "USB-Unterstuetzung"` (usb_einbinden.py).
+
 # Fassung 2026.11.15.54 -- Installation vom USB-DVD-Laufwerk
 
 Gefunden auf einem HP EliteDesk 705 G5 (Ryzen, kein eingebautes

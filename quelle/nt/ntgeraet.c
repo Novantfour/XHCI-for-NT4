@@ -438,7 +438,7 @@ ntu_ressourcen_melden (void)
         f->BusNumber                      = ntu_melde[k].Bus;
         f->PartialResourceList.Version    = 1;
         f->PartialResourceList.Revision   = 1;
-        f->PartialResourceList.Count      = 2;
+        f->PartialResourceList.Count      = ntu_melde[k].Irq ? 2 : 1;
         p = &f->PartialResourceList.PartialDescriptors[0];
         if (ntu_melde[k].Io) {
             p->Type             = CmResourceTypePort;
@@ -600,20 +600,50 @@ bus_setup_intr (device_t dev, struct resource *r, int flags,
         return ENOMEM;
     }
 
-    vector = HalGetInterruptVector(PCIBus, iv->Bus, r->r_irq, r->r_irq,
-                                   &dirql, &aff);
+    /*  Leitung 0 und 255 heissen "nicht zugewiesen".  Auf neueren
+     *  Brettern im CSM-Betrieb haeufig: das BIOS traegt nur noch fuer den
+     *  APIC-Betrieb ein (Leitung 16..55) oder gar nichts.  Unter der
+     *  PIC-HAL ist das nicht anschliessbar.  Dann nicht aufgeben,
+     *  sondern abfragen.  */
 
-    st = IoConnectInterrupt(&i->Object, ntu_isr, i, NULL, vector,
-                            dirql, dirql, LevelSensitive, TRUE, aff,
-                            FALSE);
+    st = STATUS_INVALID_PARAMETER;
+
+#ifndef NTU_ABFRAGE_ERZWINGEN
+#define NTU_ABFRAGE_ERZWINGEN 0     /* Pruefstand: 1 = nie anschliessen */
+#endif
+    if (r->r_irq != 0 && r->r_irq != 255 && !NTU_ABFRAGE_ERZWINGEN) {
+
+        vector = HalGetInterruptVector(PCIBus, iv->Bus, r->r_irq, r->r_irq,
+                                       &dirql, &aff);
+
+        if (vector != 0) {
+            st = IoConnectInterrupt(&i->Object, ntu_isr, i, NULL, vector,
+                                    dirql, dirql, LevelSensitive, TRUE, aff,
+                                    FALSE);
+        }
+    }
 
     if (!NT_SUCCESS(st)) {
-        ntu_printf("usb: IoConnectInterrupt auf Leitung %u: %08x\n",
-                   r->r_irq, st);
-        ntu_thread_stop(i->Thread);
-        ntu_free(i->Thread);
-        ntu_free(i);
-        return ENXIO;
+
+        LARGE_INTEGER erst;
+
+        ntu_printf("usb: %s: Leitung %u nicht nutzbar (%08x) -- "
+                   "Abfragebetrieb im Systemtakt\n",
+                   device_get_nameunit(dev), r->r_irq, st);
+        i->Object  = NULL;
+        i->Abfrage = 1;
+        KeInitializeTimer(&i->Takt);
+        KeInitializeDpc(&i->TaktDpc, ntu_dpc, i);
+        /*  1 ms angefordert; NT 4.0 rundet auf seinen Takt (10-15 ms) --
+         *  ExSetTimerResolution gibt es dort noch nicht.  Fuer Tastatur,
+         *  Maus und Laufwerk reicht das.  */
+        erst.QuadPart = -10000;
+        KeSetTimerEx(&i->Takt, erst, 1, &i->TaktDpc);
+
+        *cookiep = i;
+        dev->Intr = i;
+        ntu_ressourcen_eintragen(iv, dev->Res, 0);
+        return 0;
     }
 
     *cookiep = i;
@@ -635,7 +665,12 @@ bus_teardown_intr (device_t dev, struct resource *r, void *cookie)
      *  kann ein DPC noch ein Ereignis setzen, auf das niemand mehr
      *  wartet, und der naechste Ruf laeuft in freigegebenen Speicher.  */
 
-    IoDisconnectInterrupt(i->Object);
+    if (i->Abfrage) {
+        KeCancelTimer(&i->Takt);
+        KeRemoveQueueDpc(&i->TaktDpc);
+    } else {
+        IoDisconnectInterrupt(i->Object);
+    }
 
     /*  Der ISR kann unmittelbar vor dem Abklemmen noch einen DPC
      *  eingereiht haben.  Der liefe sonst nach ntu_free(i) und setzte ein

@@ -545,6 +545,14 @@ DriverEntry (PDRIVER_OBJECT drv, PUNICODE_STRING reg)
     }
 #endif
 
+#ifdef NTU_SETUP_BILDSCHIRM
+    {
+        extern ULONG ntu_bildschirm;
+        if (NT_SUCCESS(RtlCheckRegistryKey(RTL_REGISTRY_SERVICES, L"setupdd"))) {
+            ntu_bildschirm = 1;
+        }
+    }
+#endif
     ntu_printf("\r\n%s: FreeBSD-USB auf NT 4.0, Fassung %s\n", NTU_BAUART, NTU_DATEIFASSUNG);
     ntu_treiberobjekt = drv;
 
@@ -578,6 +586,7 @@ DriverEntry (PDRIVER_OBJECT drv, PUNICODE_STRING reg)
      *  Tastatur legt ein Anschlussgeraet an, und IoCreateDevice braucht
      *  es.  */
 
+    ntu_printf("usb: Anschluesse anlegen\n");
     ntu_port_init(drv, reg);
 
     ntu_clock_start();
@@ -586,6 +595,7 @@ DriverEntry (PDRIVER_OBJECT drv, PUNICODE_STRING reg)
     /*  Nach dem PCI-Suchlauf: ob die AMD-PLL-Abhilfe gebraucht wird.
      *  Sie greift erst, wenn ein isochroner Strom beginnt.  */
 
+    ntu_printf("usb: Uhr/Arbeitsfaden laufen, AMD-PLL pruefen\n");
     ntu_amdpll_erkennen();
 
 #if defined(NTU_USB_DEBUG) && NTU_USB_DEBUG > 0
@@ -659,6 +669,7 @@ DriverEntry (PDRIVER_OBJECT drv, PUNICODE_STRING reg)
         return STATUS_INSUFFICIENT_RESOURCES;
     }
 
+    ntu_printf("usb: PCI-Suche\n");
     ntu_scan_pci();
 
     if (ntu_hc_count == 0) {
@@ -712,6 +723,7 @@ DriverEntry (PDRIVER_OBJECT drv, PUNICODE_STRING reg)
      *  Werkzeug etwas zu lesen.  Scheitert es, laeuft der Treiber
      *  trotzdem -- nur ohne Diagnose.  */
 
+    ntu_printf("usb: DriverEntry fertig\n");
     ntu_steuer_create();
 
 #ifdef NTU_HERZSCHLAG

@@ -103,6 +103,12 @@ assert marke in d, '[Extenders.Load] nicht gefunden'
 if b'usbnt  = usbnt.sys' not in d:
     d = d.replace(marke, marke + b'usbnt  = usbnt.sys,4\r\n')
     open(sif, 'wb').write(d)
+# Beschreibung fuer die Statuszeile von SETUPLDR (sonst "noname")
+beschr = b'[Extenders]\r\npcmcia = "PCMCIA-Unterst\x81tzung"\r\n'
+assert beschr in d, '[Extenders] nicht gefunden'
+if b'usbnt  = "USB-' not in d:
+    d = d.replace(beschr, beschr + b'usbnt  = "USB-Unterst\x81tzung"\r\n')
+    open(sif, 'wb').write(d)
 sreg = os.path.join(i386, 'SETUPREG.HIV')
 tmp = sreg + '.neu'; shutil.copyfile(sreg, tmp); os.replace(tmp, sreg)   # Hardlink loesen
 h = hivex.Hivex(sreg, write=True)

@@ -76,6 +76,14 @@ static KSPIN_LOCK ntu_buf_lock;
 
 ULONG ntu_uart_basis = 0x3F8;
 
+/*  Diagnose im Textmodus-Setup (nur Bauart NTU_SETUP_BILDSCHIRM):
+ *  jede Zeile zusaetzlich mit HalDisplayString auf den blauen
+ *  Startbildschirm -- fuer Rechner ohne COM-Anschluss.  */
+ULONG ntu_bildschirm;
+static ULONG ntu_bildschirm_zeilen;
+static LONGLONG ntu_bildschirm_t0;
+NTHALAPI VOID NTAPI HalDisplayString (PUCHAR s);
+
 #define NTU_UART        ((PUCHAR)(ULONG_PTR)ntu_uart_basis)
 #define NTU_UART_LSR    ((PUCHAR)(ULONG_PTR)(ntu_uart_basis + 5))
 #define NTU_UART_THRE   0x20
@@ -352,6 +360,20 @@ ntu_printf (const char *fmt, ...)
     _vsnprintf(ntu_buf, sizeof(ntu_buf) - 1, fmt, ap);
     va_end(ap);
     ntu_buf[sizeof(ntu_buf) - 1] = '\0';
+    if (ntu_bildschirm && ntu_bildschirm_zeilen < 400) {
+        static CHAR z[300];
+        LARGE_INTEGER f, t = KeQueryPerformanceCounter(&f);
+        ULONG ms;
+        if (ntu_bildschirm_t0 == 0) {
+            ntu_bildschirm_t0 = t.QuadPart;
+        }
+        ms = (ULONG)((t.QuadPart - ntu_bildschirm_t0) * 1000 / (f.QuadPart ? f.QuadPart : 1));
+        ntu_bildschirm_zeilen += 1;
+        _snprintf(z, sizeof(z) - 1, "[%6u] %s", ms,
+                  ntu_buf[0] == '\r' ? ntu_buf + 2 : ntu_buf);
+        z[sizeof(z) - 1] = '\0';
+        HalDisplayString((PUCHAR)z);
+    }
 #if !defined(NTU_KISERIAL) && !defined(NTU_OHNE_SERIELL)
     if (ntu_ring_an) {
         wecken = ntu_ring_legen(ntu_buf);       /* Mikrosekunden */

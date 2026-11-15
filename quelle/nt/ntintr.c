@@ -376,8 +376,10 @@ ntu_ithread_body (PVOID ctx)
          *  sichtbar, und WRITE_REGISTER_ULONG ist ein solcher; die
          *  Reihenfolge hier reicht also ohne eigene Schranke.  */
 
-        i->Gesperrt = 0;
-        ntu_intr_unmask(i);
+        if (!i->Abfrage) {
+            i->Gesperrt = 0;
+            ntu_intr_unmask(i);
+        }
     }
 }
 

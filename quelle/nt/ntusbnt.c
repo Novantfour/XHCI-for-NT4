@@ -494,6 +494,28 @@ NtuUnload (PDRIVER_OBJECT drv)
  *  und DPC-Pfad arbeitet.  Was nachweislich NUR passiv laeuft (Entladen,
  *  Einrichten, Registry), liegt im auslagerbaren Abschnitt PAGE
  *  (nt/ntpaged.h, NTU_PAGED).  */
+/*  Laeuft das grafische Setup?  HKLM\SYSTEM\Setup, SystemSetupInProgress.  */
+static BOOLEAN
+ntu_setup_laeuft (VOID)
+{
+    RTL_QUERY_REGISTRY_TABLE t[2];
+    ULONG wert = 0, vorgabe = 0;
+
+    memset(t, 0, sizeof(t));
+    t[0].Flags         = RTL_QUERY_REGISTRY_DIRECT;
+    t[0].Name          = L"SystemSetupInProgress";
+    t[0].EntryContext  = &wert;
+    t[0].DefaultType   = REG_DWORD;
+    t[0].DefaultData   = &vorgabe;
+    t[0].DefaultLength = sizeof(ULONG);
+
+    if (!NT_SUCCESS(RtlQueryRegistryValues(RTL_REGISTRY_ABSOLUTE,
+                        L"\\Registry\\Machine\\System\\Setup", t, 0, 0))) {
+        return FALSE;
+    }
+    return wert != 0;
+}
+
 #ifndef NTU_SETUP_WARTEN
 #define NTU_SETUP_WARTEN  30        /* Sekunden, nur im Textmodus-Setup */
 #endif
@@ -698,14 +720,21 @@ DriverEntry (PDRIVER_OBJECT drv, PUNICODE_STRING reg)
      *  angelegt ist, hoechstens NTU_SETUP_WARTEN Sekunden.
      *
      *  Setup erkennt man am Dienst setupdd: den gibt es nur in der
-     *  Registry des Textmodus-Setups.  Im installierten System wird nie
-     *  gewartet.  */
+     *  Registry des Textmodus-Setups.
+     *
+     *  Ebenso im grafischen Setup (System\Setup\SystemSetupInProgress):
+     *  setup.exe sucht gleich zu Beginn sein Quelllaufwerk.  Ist das
+     *  USB-DVD-Laufwerk dann noch nicht angelegt (es laeuft nach dem
+     *  Neustart erst an), endet Setup mit "Interne Setup-Datenstrukturen
+     *  sind beschaedigt (Phase 0)" -- HP EliteDesk 705 G5, mal ja, mal nein.
+     *  Im fertig installierten System wird nie gewartet.  */
     if (ntu_hc_count != 0 &&
-        NT_SUCCESS(RtlCheckRegistryKey(RTL_REGISTRY_SERVICES, L"setupdd"))) {
+        (NT_SUCCESS(RtlCheckRegistryKey(RTL_REGISTRY_SERVICES, L"setupdd")) ||
+         ntu_setup_laeuft())) {
         extern volatile LONG ntum_cd_angelegt;
         LARGE_INTEGER t;
         ULONG z;
-        ntu_printf("usb: Textmodus-Setup -- warte auf USB-CD/DVD\n");
+        ntu_printf("usb: Setup -- warte auf USB-CD/DVD\n");
         t.QuadPart = -2500000;                      /* 250 ms */
         for (z = 0; z < NTU_SETUP_WARTEN * 4 && ntum_cd_angelegt == 0; z += 1) {
             KeDelayExecutionThread(KernelMode, FALSE, &t);

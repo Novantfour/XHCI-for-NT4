@@ -2135,3 +2135,13 @@ entnommen und liess CDFS pruefen -- das gab den Datentraeger auf.
 Geprueft in QEMU (8 Prozessoren, xHCI, usb-bot + scsi-cd): Lesen, danach
 "change" auf dieselbe ISO (UNIT ATTENTION) und weiterlesen.  Das Anhalten
 der Scheibe kann QEMU nicht nachstellen -- auf echter Hardware noch offen.
+
+## 2026.11.16.60 -- im grafischen Setup auf das USB-CD/DVD-Laufwerk warten
+
+HP EliteDesk 705 G5: grafisches Setup endete mal mit "Interne
+Setup-Datenstrukturen sind beschaedigt (Phase 0)", mal lief es durch.
+Vermutung: setup.exe sucht sein Quelllaufwerk, bevor das USB-DVD-Laufwerk
+nach dem Neustart angelegt ist.  DriverEntry wartet jetzt auch bei
+System\Setup\SystemSetupInProgress != 0 bis zu 30 s auf ein USB-CD/DVD
+(bisher nur im Textmodus-Setup).  In QEMU nur geprueft, dass der Start mit
+gesetztem Wert durchlaeuft; die Wirkung auf echter Hardware ist offen.

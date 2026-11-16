@@ -2159,3 +2159,18 @@ Auf dem HP 705 G5 reichten die 30 s aus .60 nicht.  Jetzt im grafischen
 Setup bis 180 s, mit Zeilen auf dem Startbildschirm ("usbnt: Setup -- warte
 ...", alle 10 s eine Zeile, am Ende "gefunden" oder "KEIN ... nach 3
 Minuten").  Warum das Laufwerk dort so spaet erscheint, ist offen.
+
+## 2026.11.16.62 -- Sicherungstakt neben der Unterbrechung
+
+HP EliteDesk 705 G5, MPS-HAL mit aus ACPI erzeugter Tabelle (ACPIMPS):
+im grafischen Setup erschien das USB-DVD-Laufwerk auch nach 150 s nicht,
+obwohl Uhr und Warteschleife stimmen (ACPIMPS-Messung: 500 ms = 494 ms,
+100 ms = 100 ms).  Vermutung: der xHCI bekommt jetzt eine Leitung, auf der
+nichts ankommt (vorher lief er dort im Abfragebetrieb).
+
+- Auch mit angeschlossener Leitung weckt ein Takt alle 50 ms den
+  Unterbrechungsfaden.  Freigegeben wird nur, wenn der ISR gesperrt hat.
+- Setup-Zeile nennt jetzt Wartezeit, echte Unterbrechungen und Fadenlaeufe.
+
+QEMU (8 Prozessoren, xHCI mit echter Leitung): Laufwerk nach 1 s,
+92 echte Unterbrechungen, Setup-Assistent erscheint.

@@ -766,9 +766,14 @@ DriverEntry (PDRIVER_OBJECT drv, PUNICODE_STRING reg)
         ntu_printf("usb: Setup: %d USB-CD/DVD nach %u ms\n",
                    (int)ntum_cd_angelegt, z * 250);
         if (grafisch) {
-            HalDisplayString((PUCHAR)(ntum_cd_angelegt != 0
-                ? "usbnt: USB-CD/DVD-Laufwerk gefunden\n"
-                : "usbnt: KEIN USB-CD/DVD-Laufwerk nach 3 Minuten\n"));
+            static CHAR zl[100];
+            extern NTU_ZAEHLER ntu_zaehler;
+            _snprintf(zl, sizeof(zl) - 1,
+                      "usbnt: USB-CD/DVD %s nach %lu s (%lu echte Unterbrechungen, %lu Fadenlaeufe)\n",
+                      ntum_cd_angelegt != 0 ? "gefunden" : "FEHLT",
+                      (ULONG)(z / 4), (ULONG)ntu_zaehler.Unterbrechungen,
+                      (ULONG)ntu_zaehler.Fadenlaeufe);
+            HalDisplayString((PUCHAR)zl);
         }
 #ifdef NTU_SETUP_BILDSCHIRM
         if (ntum_cd_angelegt == 0) {

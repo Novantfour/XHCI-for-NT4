@@ -376,7 +376,11 @@ ntu_ithread_body (PVOID ctx)
          *  sichtbar, und WRITE_REGISTER_ULONG ist ein solcher; die
          *  Reihenfolge hier reicht also ohne eigene Schranke.  */
 
-        if (!i->Abfrage) {
+        /*  Nur freigeben, wenn der ISR wirklich gesperrt hat: der Faden
+         *  wird auch vom Sicherungstakt geweckt (ntgeraet.c), und ein
+         *  Freigeben ohne Sperren schriebe den nie gemerkten Wert zurueck.  */
+
+        if (!i->Abfrage && i->Gesperrt != 0) {
             i->Gesperrt = 0;
             ntu_intr_unmask(i);
         }

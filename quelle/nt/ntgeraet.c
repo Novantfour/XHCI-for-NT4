@@ -646,6 +646,20 @@ bus_setup_intr (device_t dev, struct resource *r, int flags,
         return 0;
     }
 
+    /*  Sicherungstakt: auch mit angeschlossener Leitung alle 50 ms
+     *  nachsehen.  Unter der MPS-HAL mit aus ACPI erzeugter Tabelle (HP
+     *  EliteDesk 705 G5) bekam der xHCI eine Leitung, auf der nichts ankam:
+     *  USB stand, das Setup fand sein DVD-Laufwerk nicht.  Kommt die
+     *  Unterbrechung, kostet der Takt nichts als einen leeren Lauf des
+     *  Handlers; kommt sie nicht, laeuft USB trotzdem.  */
+    {
+        LARGE_INTEGER erst;
+        KeInitializeTimer(&i->Takt);
+        KeInitializeDpc(&i->TaktDpc, ntu_dpc, i);
+        erst.QuadPart = -500000;
+        KeSetTimerEx(&i->Takt, erst, 50, &i->TaktDpc);
+    }
+
     *cookiep = i;
     dev->Intr = i;
     ntu_ressourcen_eintragen(iv, dev->Res, r->r_irq);
@@ -665,10 +679,9 @@ bus_teardown_intr (device_t dev, struct resource *r, void *cookie)
      *  kann ein DPC noch ein Ereignis setzen, auf das niemand mehr
      *  wartet, und der naechste Ruf laeuft in freigegebenen Speicher.  */
 
-    if (i->Abfrage) {
-        KeCancelTimer(&i->Takt);
-        KeRemoveQueueDpc(&i->TaktDpc);
-    } else {
+    KeCancelTimer(&i->Takt);               /* Abfrage- oder Sicherungstakt */
+    KeRemoveQueueDpc(&i->TaktDpc);
+    if (!i->Abfrage) {
         IoDisconnectInterrupt(i->Object);
     }
 

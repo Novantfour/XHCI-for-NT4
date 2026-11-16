@@ -1,3 +1,11 @@
+# Fassung 2026.11.15.58 -- Lesefehler am USB-DVD wiederholen
+
+EliteDesk 705 G5, Textmodus-Setup vom USB-DVD-Laufwerk: mehrere Dateien
+"konnten nicht kopiert werden" (z.B. qv.sys), beim erneuten Versuch ging
+es.  ntum_lesen machte genau einen Versuch.  Jetzt bis zu 5 Versuche mit
+250 ms Pause; nicht bei Sense 06 (Medium gewechselt) oder abgezogenem
+Geraet.  Jeder Fehlversuch wird gemeldet (im Setup auf dem Bildschirm).
+
 # Fassung 2026.11.15.57 -- Ryzen-USB hinter einer Bus-Luecke
 
 Zweiter Lauf auf dem EliteDesk 705 G5 (Abfragebetrieb aktiv): der

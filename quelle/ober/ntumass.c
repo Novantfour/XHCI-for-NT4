@@ -447,11 +447,33 @@ ntum_lesen (ntum_einheit *E, uint32_t lba, uint32_t bloecke, uint8_t *ziel)
     cdb[4] = (uint8_t)(lba >> 8);  cdb[5] = (uint8_t)lba;
     cdb[7] = (uint8_t)(bloecke >> 8); cdb[8] = (uint8_t)bloecke;
 
-    if (ntum_scsi(E, cdb, 10, 0, ziel, soll, &ist) != 0 || ist != soll) {
-        return 0;
+    /*  Wiederholen.  Echte DVD-Laufwerke melden gelegentlich voruebergehende
+     *  Fehler: "noch nicht bereit" nach dem Abbremsen (02/04), eine schwer
+     *  lesbare Stelle (03/xx, das Laufwerk liest beim naechsten Mal oft
+     *  doch), oder die Uebertragung reisst ab.  HP EliteDesk 705 G5,
+     *  Textmodus-Setup: mehrere Dateien "konnten nicht kopiert werden",
+     *  beim erneuten Versuch ging es.  Nicht wiederholt wird "Medium
+     *  gewechselt" (06) -- das muss NT sehen.  */
+    {
+        uint32_t versuch;
+        for (versuch = 0; versuch < 5; versuch += 1) {
+            if (ntum_scsi(E, cdb, 10, 0, ziel, soll, &ist) == 0 && ist == soll) {
+                if (versuch != 0) {
+                    ntu_printf("umass: LBA %u gelesen im %u. Versuch\n", lba, versuch + 1);
+                }
+                return 1;
+            }
+            if (E->sc->sc_weg || E->sc->sc_sense[0] == 0x06) {
+                break;
+            }
+            ntu_printf("umass: Lesefehler LBA %u (+%u), Sense %02x/%02x/%02x -- Versuch %u\n",
+                       lba, bloecke, E->sc->sc_sense[0], E->sc->sc_sense[1],
+                       E->sc->sc_sense[2], versuch + 1);
+            ntu_pause_ticks(hz / 4);
+        }
     }
 
-    return 1;
+    return 0;
 }
 
 static int

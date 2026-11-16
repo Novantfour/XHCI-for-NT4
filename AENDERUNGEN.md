@@ -2145,3 +2145,17 @@ nach dem Neustart angelegt ist.  DriverEntry wartet jetzt auch bei
 System\Setup\SystemSetupInProgress != 0 bis zu 30 s auf ein USB-CD/DVD
 (bisher nur im Textmodus-Setup).  In QEMU nur geprueft, dass der Start mit
 gesetztem Wert durchlaeuft; die Wirkung auf echter Hardware ist offen.
+
+## 2026.11.16.61 -- grafisches Setup: bis 3 Minuten auf das USB-CD/DVD warten, mit Anzeige
+
+"Interne Setup-Datenstrukturen sind beschaedigt (Phase 0)" ist geklaert:
+syssetup.dll liest aus $winnt$.inf den Quellpfad (\device\cdromN\...) und
+sucht den Laufwerksbuchstaben dazu; gibt es das Laufwerk nicht, kommt diese
+Meldung.  In QEMU nachgestellt: derselbe Start ohne angeschlossenes
+USB-DVD-Laufwerk liefert genau diesen Fehler, mit Laufwerk laeuft Setup an
+(4 von 4 Starts, 8 Prozessoren).
+
+Auf dem HP 705 G5 reichten die 30 s aus .60 nicht.  Jetzt im grafischen
+Setup bis 180 s, mit Zeilen auf dem Startbildschirm ("usbnt: Setup -- warte
+...", alle 10 s eine Zeile, am Ende "gefunden" oder "KEIN ... nach 3
+Minuten").  Warum das Laufwerk dort so spaet erscheint, ist offen.

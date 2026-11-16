@@ -732,12 +732,26 @@ DriverEntry (PDRIVER_OBJECT drv, PUNICODE_STRING reg)
         (NT_SUCCESS(RtlCheckRegistryKey(RTL_REGISTRY_SERVICES, L"setupdd")) ||
          ntu_setup_laeuft())) {
         extern volatile LONG ntum_cd_angelegt;
+        NTHALAPI VOID NTAPI HalDisplayString (PUCHAR s);
         LARGE_INTEGER t;
-        ULONG z;
+        ULONG z, grenze;
+        BOOLEAN grafisch;
         ntu_printf("usb: Setup -- warte auf USB-CD/DVD\n");
         t.QuadPart = -2500000;                      /* 250 ms */
-        for (z = 0; z < NTU_SETUP_WARTEN * 4 && ntum_cd_angelegt == 0; z += 1) {
+        /*  Grafisches Setup: bis zu 3 Minuten, mit Anzeige auf dem
+         *  Startbildschirm.  Ohne Quelllaufwerk bricht Setup ohnehin ab
+         *  ("Phase 0"; in QEMU nachgestellt: Start ohne USB-DVD-Laufwerk),
+         *  und auf dem HP 705 G5 reichen 30 s nicht.  */
+        grafisch = !NT_SUCCESS(RtlCheckRegistryKey(RTL_REGISTRY_SERVICES, L"setupdd"));
+        grenze   = (grafisch ? 180 : NTU_SETUP_WARTEN) * 4;
+        if (grafisch) {
+            HalDisplayString((PUCHAR)"usbnt: Setup -- warte auf das USB-CD/DVD-Laufwerk\n");
+        }
+        for (z = 0; z < grenze && ntum_cd_angelegt == 0; z += 1) {
             KeDelayExecutionThread(KernelMode, FALSE, &t);
+            if (grafisch && z % 40 == 39) {
+                HalDisplayString((PUCHAR)"usbnt: ... noch kein USB-CD/DVD (weitere 10 s)\n");
+            }
             if (z % 20 == 19) {
                 ntu_printf("usb: Setup: warte seit %u s, noch kein USB-CD/DVD\n",
                            (z + 1) / 4);
@@ -751,6 +765,11 @@ DriverEntry (PDRIVER_OBJECT drv, PUNICODE_STRING reg)
         }
         ntu_printf("usb: Setup: %d USB-CD/DVD nach %u ms\n",
                    (int)ntum_cd_angelegt, z * 250);
+        if (grafisch) {
+            HalDisplayString((PUCHAR)(ntum_cd_angelegt != 0
+                ? "usbnt: USB-CD/DVD-Laufwerk gefunden\n"
+                : "usbnt: KEIN USB-CD/DVD-Laufwerk nach 3 Minuten\n"));
+        }
 #ifdef NTU_SETUP_BILDSCHIRM
         if (ntum_cd_angelegt == 0) {
             extern VOID ntu_bildschirm_zusammenfassung (ULONG sekunden);

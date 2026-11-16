@@ -514,6 +514,27 @@ xhci_pci_detach(device_t self)
 	return (0);
 }
 
+/*
+ * NT 4.0: nach der Uebernahme die SMI-Quellen des Bausteins abschalten
+ * (USBLEGCTLSTS, 4 Byte hinter USBLEGSUP), wie Linux es in
+ * quirk_usb_handoff_xhci immer tut.  FreeBSD laesst sie stehen.  Gibt das
+ * BIOS nie frei (HP EliteDesk 705 G5 im CSM), dann bedient sein SMM-Code
+ * sonst weiter denselben Baustein, den jetzt wir fahren -- zufaellige
+ * Abstuerze und harte Neustarts waeren die Folge.
+ * Bits 1-3, 5-12, 17-19 bleiben (RsvdP), SMI-Freigaben (0, 4, 13-15) werden
+ * geloescht, die Ereignisbits 29-31 (RW1C) quittiert.
+ */
+static void
+xhci_pci_smi_aus(struct xhci_softc *sc, uint32_t eecp)
+{
+	uint32_t v;
+
+	v = XREAD4(sc, capa, eecp + 4);
+	v &= (0x7U << 1) | (0xffU << 5) | (0x7U << 17);
+	v |= (0x7U << 29);
+	XWRITE4(sc, capa, eecp + 4, v);
+}
+
 static int
 xhci_pci_take_controller(device_t self)
 {
@@ -537,8 +558,10 @@ xhci_pci_take_controller(device_t self)
 			continue;
 		bios_sem = XREAD1(sc, capa, eecp +
 		    XHCI_XECP_BIOS_SEM);
-		if (bios_sem == 0)
+		if (bios_sem == 0) {
+			xhci_pci_smi_aus(sc, eecp);
 			continue;
+		}
 		device_printf(sc->sc_bus.bdev, "waiting for BIOS "
 		    "to give up control\n");
 		XWRITE1(sc, capa, eecp +
@@ -556,10 +579,15 @@ xhci_pci_take_controller(device_t self)
 			if (--to == 0) {
 				device_printf(sc->sc_bus.bdev,
 				    "timed out waiting for BIOS\n");
+				/* NT 4.0, wie Linux (quirk_usb_handoff_xhci):
+				 * dem BIOS den Baustein wegnehmen. */
+				XWRITE1(sc, capa, eecp +
+				    XHCI_XECP_BIOS_SEM, 0);
 				break;
 			}
 			usb_pause_mtx(NULL, hz / 100);	/* wait 10ms */
 		}
+		xhci_pci_smi_aus(sc, eecp);
 	}
 	return (0);
 }

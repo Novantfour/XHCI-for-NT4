@@ -929,6 +929,18 @@ ntum_cdfs_laden (PVOID kontext)
     NTSTATUS       st;
 
     (void)kontext;
+
+    /*  Nicht im Textmodus-Setup.  Dort hat setupldr Cdfs ohnehin geladen
+     *  (es kommt nur spaeter an die Reihe als wir), und ZwLoadDriver ruft
+     *  am Ende die Nachinitialisierungsroutinen ALLER Treiber auf -- auch
+     *  die von setupdd, die damit laeuft, bevor der Kern die gescheiterten
+     *  SCSI-Miniports gekennzeichnet hat.  Folge: Setup haelt alle rund 30
+     *  Miniports fuer geladen und traegt sie mit Start 0 ein; das fertige
+     *  System versucht bei jedem Start, sie alle zu laden (Ereignis 7026).
+     *  Mit gdb in QEMU nachgewiesen, 16.11.2026.  */
+    if (NT_SUCCESS(RtlCheckRegistryKey(RTL_REGISTRY_SERVICES, L"setupdd"))) {
+        return;
+    }
     RtlInitUnicodeString(&n, L"\\Cdfs");
     if (NT_SUCCESS(IoGetDeviceObjectPointer(&n, FILE_READ_ATTRIBUTES, &fo, &dev))) {
         ObDereferenceObject(fo);

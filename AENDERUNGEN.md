@@ -1,3 +1,28 @@
+# Fassung 2026.11.16.64 -- Setup schaltet nicht mehr alle SCSI-Miniports ein
+
+EliteDesk 705 G5, Ereignis 7026 nach der Installation: rund 30 alte
+SCSI-Treiber (Aha154x, Sparrow, ...) scheitern bei jedem Start.  In QEMU
+nachgestellt: nach dem Textmodus-Setup stehen alle Miniports aus
+[SCSI.Load] auf Start 0.
+
+Ursache (gdb am QEMU-Kern): ntum_cdfs_laden rief ZwLoadDriver(Cdfs) schon
+waehrend der Starttreiber-Phase des Textmodus.  ZwLoadDriver ruft am Ende
+die Nachinitialisierungsroutinen aller Treiber auf -- auch die von
+setupdd, die anhand von LDRP_FAILED_BUILTIN_LOAD die gescheiterten
+Miniports aus ihrer Liste streicht.  Zu dem Zeitpunkt war noch keiner
+gekennzeichnet, also blieben alle stehen.  Jetzt im Textmodus kein
+ZwLoadDriver (setupldr laedt Cdfs dort selbst).  Nachher: 29 gestrichen,
+1 behalten (uniata am AHCI von q35).
+
+# Fassung 2026.11.16.63 -- BIOS-Uebergabe: SMI abschalten
+
+xhci_pci.c / ehci_pci.c: gibt das BIOS den Baustein nicht frei (705 G5 im
+CSM), wird das BIOS-Semaphor zwangsweise geloescht und in USBLEGCTLSTS
+jede SMI-Freigabe abgeschaltet (xHCI: Statusbits quittiert).  Sonst kann
+das BIOS weiter per SMI in den Baustein greifen, waehrend wir ihn fahren.
+In QEMU ohne Wirkung pruefbar (Installation laeuft durch); auf dem 705 G5
+noch nicht erprobt.
+
 # Fassung 2026.11.15.58 -- Lesefehler am USB-DVD wiederholen
 
 EliteDesk 705 G5, Textmodus-Setup vom USB-DVD-Laufwerk: mehrere Dateien

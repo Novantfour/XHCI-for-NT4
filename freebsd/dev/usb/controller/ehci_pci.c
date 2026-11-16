@@ -587,10 +587,15 @@ ehci_pci_take_controller(device_t self)
 			if (--to == 0) {
 				device_printf(sc->sc_bus.bdev,
 				    "timed out waiting for BIOS\n");
+				/* NT 4.0, wie Linux: dem BIOS wegnehmen. */
+				pci_write_config(self, eecp +
+				    EHCI_LEGSUP_BIOS_SEM, 0, 1);
 				break;
 			}
 			usb_pause_mtx(NULL, hz / 100);	/* wait 10ms */
 		}
+		/* NT 4.0, wie Linux: SMI-Quellen des EHCI immer abschalten. */
+		pci_write_config(self, eecp + EHCI_LEGSUP_USBLEGCTLSTS, 0, 4);
 	}
 	return (0);
 }

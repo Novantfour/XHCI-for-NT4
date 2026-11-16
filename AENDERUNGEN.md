@@ -2115,3 +2115,23 @@ Gebaut aus dem Repo-Stand 2026.11.11.2 + obige Aenderungen als
 in QEMU gestartet (xHCI, alle vier Geraete erkannt, bis Anmeldung);
 der volle Durchlauf oben lief mit dem gleichen ntumass.c auf dem Stand des
 Pakets usb-nt4-komplett30.  Installer und bin/treiber unveraendert.
+
+## 2026.11.16.59 -- umass: anlaufendes DVD-Laufwerk nicht als "leer" behandeln
+
+HP EliteDesk 705 G5, grafisches Setup: nach den Dialogen (Scheibe steht)
+"Auf D:\ kann nicht zugegriffen werden. Unzulaessige Funktion", auch beim
+Wiederholen; Ab- und Anstecken des Laufwerks half.  Vermutete Ursache: das
+Laufwerk meldet beim Anlaufen sekundenlang 02/04 ("wird bereit") bzw. UNIT
+ATTENTION; der Treiber wartete nur gut 1 s, erklaerte das Medium fuer
+entnommen und liess CDFS pruefen -- das gab den Datentraeger auf.
+
+- ntum_lesen: bei 02/04 und Transportabriss bis 30 s warten; bei 06/xx
+  bereit abwarten und Groesse vergleichen (gleich = dieselbe Scheibe,
+  weiterlesen); "leer" nur noch 02/3A.
+- ntum_leer: 02/04 zaehlt nicht als leer.
+- Regelmaessige Abfrage: CD geduldig neu einlesen; gleiche Groesse -> kein
+  DO_VERIFY_VOLUME.
+
+Geprueft in QEMU (8 Prozessoren, xHCI, usb-bot + scsi-cd): Lesen, danach
+"change" auf dieselbe ISO (UNIT ATTENTION) und weiterlesen.  Das Anhalten
+der Scheibe kann QEMU nicht nachstellen -- auf echter Hardware noch offen.

@@ -447,28 +447,66 @@ ntum_lesen (ntum_einheit *E, uint32_t lba, uint32_t bloecke, uint8_t *ziel)
     cdb[4] = (uint8_t)(lba >> 8);  cdb[5] = (uint8_t)lba;
     cdb[7] = (uint8_t)(bloecke >> 8); cdb[8] = (uint8_t)bloecke;
 
-    /*  Wiederholen.  Echte DVD-Laufwerke melden gelegentlich voruebergehende
-     *  Fehler: "noch nicht bereit" nach dem Abbremsen (02/04), eine schwer
-     *  lesbare Stelle (03/xx, das Laufwerk liest beim naechsten Mal oft
-     *  doch), oder die Uebertragung reisst ab.  HP EliteDesk 705 G5,
-     *  Textmodus-Setup: mehrere Dateien "konnten nicht kopiert werden",
-     *  beim erneuten Versuch ging es.  Nicht wiederholt wird "Medium
-     *  gewechselt" (06) -- das muss NT sehen.  */
+    /*  Wiederholen.  Echte DVD-Laufwerke melden voruebergehende Fehler:
+     *    02/04  "wird bereit": das Laufwerk hat nach einer Pause die Scheibe
+     *           angehalten und braucht 5-15 s zum Anlaufen.  HP EliteDesk
+     *           705 G5, grafisches Setup: waehrend der Dialoge steht die
+     *           Scheibe; die erste Datei danach scheiterte, das Laufwerk galt
+     *           als leer, CDFS gab den Datentraeger auf ("Auf D:\ kann nicht
+     *           zugegriffen werden.  Unzulaessige Funktion").
+     *    06/xx  UNIT ATTENTION nach Aufwachen oder Ruecksetzen.  Nur wenn
+     *           sich die Groesse geaendert hat, ist es eine andere Scheibe.
+     *    03/xx  schwer lesbare Stelle; beim naechsten Mal geht es oft.
+     *    Abriss der Uebertragung.
+     *  Wirklich leer ist nur 02/3A (kein Medium) -- und "Geraet weg".  */
     {
-        uint32_t versuch;
-        for (versuch = 0; versuch < 5; versuch += 1) {
-            if (ntum_scsi(E, cdb, 10, 0, ziel, soll, &ist) == 0 && ist == soll) {
+        uint32_t versuch, warten = 0, sonst = 0;
+        for (versuch = 0; ; versuch += 1) {
+            int r = ntum_scsi(E, cdb, 10, 0, ziel, soll, &ist);
+            uint8_t k = E->sc->sc_sense[0], asc = E->sc->sc_sense[1];
+
+            if (r == 0 && ist == soll) {
                 if (versuch != 0) {
                     ntu_printf("umass: LBA %u gelesen im %u. Versuch\n", lba, versuch + 1);
                 }
                 return 1;
             }
-            if (E->sc->sc_weg || E->sc->sc_sense[0] == 0x06) {
-                break;
-            }
-            ntu_printf("umass: Lesefehler LBA %u (+%u), Sense %02x/%02x/%02x -- Versuch %u\n",
-                       lba, bloecke, E->sc->sc_sense[0], E->sc->sc_sense[1],
+            if (E->sc->sc_weg) break;
+            ntu_printf("umass: Lesefehler LBA %u (+%u), %s %02x/%02x/%02x -- Versuch %u\n",
+                       lba, bloecke, r == 2 ? "Transport" : "Sense", k, asc,
                        E->sc->sc_sense[2], versuch + 1);
+
+            if (r == 1 && k == 0x02 && asc == 0x3A) break;          /* kein Medium */
+
+            if (r == 1 && k == 0x06) {
+                /*  Dieselbe Scheibe?  Bereit abwarten, Groesse vergleichen.  */
+                uint8_t c2[10], d[8];
+                uint32_t i, n = 0;
+                for (i = 0; i < 60; i += 1) {
+                    memset(c2, 0, sizeof(c2));
+                    if (ntum_scsi(E, c2, 6, 0, NULL, 0, &ist) == 0) break;
+                    if (E->sc->sc_weg || (E->sc->sc_sense[0] == 0x02 && E->sc->sc_sense[1] == 0x3A)) break;
+                    ntu_pause_ticks(hz / 2);
+                }
+                memset(c2, 0, sizeof(c2)); c2[0] = 0x25;
+                if (ntum_scsi(E, c2, 10, 0, d, 8, &ist) == 0 && ist >= 8) {
+                    n = ((uint32_t)d[0] << 24 | d[1] << 16 | d[2] << 8 | d[3]) + 1;
+                }
+                if (n != E->bloecke) {
+                    E->sc->sc_sense[0] = 0x06;                       /* gewechselt: NT soll pruefen */
+                    break;
+                }
+                if (++warten > 8) break;
+                continue;
+            }
+
+            if ((r == 1 && k == 0x02) || r == 2) {                  /* wird bereit / Abriss */
+                if (++warten > 60) break;                           /* bis 30 s */
+                ntu_pause_ticks(hz / 2);
+                continue;
+            }
+
+            if (++sonst >= 5) break;
             ntu_pause_ticks(hz / 4);
         }
     }
@@ -515,7 +553,8 @@ ntum_schreiben (ntum_einheit *E, uint32_t lba, uint32_t bloecke,
 static int
 ntum_leer (struct ntum_softc *sc)
 {
-    return sc->sc_sense[0] == 0x02 ||
+    /*  02/04 ("wird bereit") ist NICHT leer: die Scheibe laeuft nur an.  */
+    return (sc->sc_sense[0] == 0x02 && sc->sc_sense[1] != 0x04) ||
            (sc->sc_sense[0] == 0x05 && sc->sc_sense[1] == 0x25);
 }
 
@@ -1281,7 +1320,7 @@ ntum_bearbeiten (ntum_einheit *E, PIRP irp)
             ntum_verify(E);
             st = STATUS_NO_MEDIA_IN_DEVICE;
         } else if (sc->sc_sense[0] == 0x06) {
-            ntum_medium(E, 0);
+            ntum_medium(E, E->cd);
             E->nt->Flags |= DO_VERIFY_VOLUME;
             st = STATUS_VERIFY_REQUIRED;
         } else if (sc->sc_sense[0] == 0x07) {
@@ -1500,9 +1539,19 @@ ntum_pruefen (ntum_einheit *E)
          *  wenn es zwischen zwei Abfragen herausgenommen und ein anderes
          *  hineingesteckt wurde.  Neu einlesen und pruefen lassen.  */
 
-        int vorher = E->medium;
+        int      vorher = E->medium;
+        uint32_t alt    = E->bloecke;
 
-        ntum_medium(E, 0);
+        /*  CD/DVD: geduldig -- ein Laufwerk, das nach einer Pause anlaeuft,
+         *  meldet erst UNIT ATTENTION und dann sekundenlang "wird bereit".
+         *  Gleiche Groesse wie vorher: dieselbe Scheibe, nichts pruefen
+         *  (sonst gibt CDFS mitten im Setup den Datentraeger auf).  */
+
+        ntum_medium(E, E->cd);
+
+        if (E->cd && vorher && E->medium && E->bloecke == alt) {
+            return;
+        }
         ntum_verify(E);
 
         /*  Nach dem Einlesen sagen, was es wirklich war -- QEMU meldet

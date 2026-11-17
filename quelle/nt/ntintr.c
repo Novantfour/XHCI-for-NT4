@@ -164,6 +164,37 @@ ntu_intr_erkannt (ntu_intr *i)
     }
 }
 
+/*  Gesperrt, aber vom Handler wieder geoeffnet und ein Ereignis steht
+ *  an?  Nur dann zieht der Baustein trotz Sperre die Leitung.  */
+
+static int
+ntu_intr_wieder_offen (ntu_intr *i)
+{
+    switch (i->ProgIf) {
+
+        case PCIP_SERIALBUS_USB_EHCI: {
+
+            ULONG sts = ntu_r4(i->Tag, i->Handle, i->OpBase + EHCI_USBSTS);
+            ULONG ena = ntu_r4(i->Tag, i->Handle, i->OpBase + EHCI_USBINTR);
+
+            return (sts & ena & 0x3F) != 0;
+        }
+
+        case PCIP_SERIALBUS_USB_XHCI: {
+
+            ULONG man = ntu_r4(i->Tag, i->Handle, i->Iman);
+
+            return (man & (XHCI_IMAN_IE | XHCI_IMAN_IP)) ==
+                   (XHCI_IMAN_IE | XHCI_IMAN_IP);
+        }
+
+        default:
+            return 0;
+    }
+}
+
+VOID ntu_intr_mask (ntu_intr *i);
+
 VOID
 ntu_intr_mask (ntu_intr *i)
 {
@@ -293,6 +324,25 @@ ntu_isr (PKINTERRUPT unused, PVOID ctx)
      *  einmal reicht.  */
 
     if (i->Gesperrt != 0) {
+
+        /*  Gesperrt, aber der Baustein zieht trotzdem: der FreeBSD-
+         *  Handler hat die Freigabe waehrend seines Laufs selbst wieder
+         *  geoeffnet (EHCI: ehci_interrupt/ehci_pcd_enable schreiben
+         *  USBINTR = sc_eintrs; xHCI: xhci_interrupt schreibt IMAN mit dem
+         *  vorher gelesenen IE zurueck).  "Nicht meins" hiesse dann:
+         *  pegelgesteuerte Leitung bleibt oben, auf einem Prozessor kommt
+         *  der Faden nie mehr dran -- Haenger.  Also nachsperren.  Saved
+         *  nimmt dabei den Wert auf, den der Handler gerade geschrieben
+         *  hat; das ist der, den er haben will.  Nur EHCI und xHCI: UHCI-
+         *  und OHCI-Handler fassen den Hauptschalter im Lauf nicht an, und
+         *  ihr Filter saehe auch bei geschlossener Freigabe "meins".  */
+
+        if (ntu_intr_wieder_offen(i)) {
+            ntu_intr_mask(i);
+            i->Nachsperre += 1;
+            return TRUE;
+        }
+
         InterlockedIncrement((LONG *)&ntu_zaehler.Fremdunterbr);
         i->Fremd += 1;
         i->FremdGesp += 1;
@@ -333,6 +383,18 @@ ntu_dpc (PKDPC dpc, PVOID ctx, PVOID a1, PVOID a2)
     KeSetEvent(&i->Wake, 0, FALSE);
 }
 
+static BOOLEAN
+ntu_sperren_sync (PVOID ctx)
+{
+    ntu_intr *i = (ntu_intr *)ctx;
+
+    if (i->Gesperrt == 0) {
+        ntu_intr_mask(i);
+        i->Gesperrt = 1;
+    }
+    return TRUE;
+}
+
 VOID
 ntu_ithread_body (PVOID ctx)
 {
@@ -347,6 +409,19 @@ ntu_ithread_body (PVOID ctx)
         }
 
         InterlockedIncrement((LONG *)&ntu_zaehler.Fadenlaeufe);
+
+        /*  Der Handler laeuft immer gesperrt -- auch wenn nicht der ISR,
+         *  sondern der Sicherungstakt (ntgeraet.c) geweckt hat.  Sonst
+         *  liefe er neben dem ISR: der sperrt mitten im Handler, und der
+         *  Handler oeffnet gleich danach wieder (xHCI schreibt IMAN mit
+         *  dem vorher gelesenen IE zurueck).  Mit dem ISR abgestimmt ueber
+         *  KeSynchronizeExecution; hat der ISR schon gesperrt, tut das
+         *  nichts.  */
+
+        if (!i->Abfrage) {
+            KeSynchronizeExecution(i->Object, ntu_sperren_sync, i);
+        }
+
         i->Handler(i->Arg);          /* der unveraenderte FreeBSD-Handler */
 
         /*  xHCI: Anschlussaenderungen nachholen, falls der Baustein

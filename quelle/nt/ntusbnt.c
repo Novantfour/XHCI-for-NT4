@@ -495,6 +495,9 @@ NtuUnload (PDRIVER_OBJECT drv)
  *  Einrichten, Registry), liegt im auslagerbaren Abschnitt PAGE
  *  (nt/ntpaged.h, NTU_PAGED).  */
 /*  Laeuft das grafische Setup?  HKLM\SYSTEM\Setup, SystemSetupInProgress.  */
+static BOOLEAN ntu_setup_laeuft (VOID);
+#pragma alloc_text(INIT, ntu_setup_laeuft)
+
 static BOOLEAN
 ntu_setup_laeuft (VOID)
 {
@@ -788,6 +791,15 @@ DriverEntry (PDRIVER_OBJECT drv, PUNICODE_STRING reg)
      *  trotzdem -- nur ohne Diagnose.  */
 
     ntu_printf("usb: DriverEntry fertig\n");
+#ifdef NTU_SETUP_BILDSCHIRM
+    {
+        /*  Ab hier gehoert der Bildschirm dem Setup (setupdd bzw. dem
+         *  Grafiktreiber).  Ein spaeteres HalDisplayString holt ihn sich
+         *  zurueck und zerstoert dessen Anzeige.  */
+        extern ULONG ntu_bildschirm;
+        ntu_bildschirm = 0;
+    }
+#endif
     ntu_steuer_create();
 
 #ifdef NTU_HERZSCHLAG

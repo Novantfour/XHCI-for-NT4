@@ -917,6 +917,13 @@ ntum_bericht (ntum_einheit *E, const char *was)
  *  tut nur der Dienststeuerungs-Manager.  Im Arbeitsauftrag, weil
  *  ZwLoadDriver selbst einen Arbeitsfaden bemueht und wartet.  */
 
+/*  Das NT-4.0-DDK deklariert ZwLoadDriver nicht (nur ntifs.h spaeterer
+ *  Fassungen); exportiert wird es von NTOSKRNL.EXE 4.0 aber.  Die freien
+ *  Koepfe (bau-frei.sh) bringen es mit.  */
+#ifndef NTU_FREIE_KOEPFE
+NTSYSAPI NTSTATUS NTAPI ZwLoadDriver (PUNICODE_STRING DriverServiceName);
+#endif
+
 static WORK_QUEUE_ITEM ntum_cdfs_arbeit;
 static LONG            ntum_cdfs_angestossen;
 

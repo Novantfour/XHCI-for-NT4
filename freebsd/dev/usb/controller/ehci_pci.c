@@ -570,6 +570,10 @@ ehci_pci_take_controller(device_t self)
 		bios_sem = pci_read_config(self, eecp +
 		    EHCI_LEGSUP_BIOS_SEM, 1);
 		if (bios_sem == 0) {
+			/* NT 4.0, wie Linux: SMI-Quellen immer abschalten,
+			 * auch wenn das BIOS den Baustein nicht haelt. */
+			pci_write_config(self, eecp +
+			    EHCI_LEGSUP_USBLEGCTLSTS, 0, 4);
 			continue;
 		}
 		device_printf(sc->sc_bus.bdev, "waiting for BIOS "

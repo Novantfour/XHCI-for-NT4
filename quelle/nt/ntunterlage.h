@@ -357,6 +357,8 @@ typedef struct ntu_intr {
     ULONG              Unt;         /* je Baustein: angenommen    */
     ULONG              Fremd;       /* je Baustein: abgewiesen    */
     ULONG              FremdGesp;   /* davon, weil gesperrt       */
+    ULONG              Nachsperre;  /* gesperrt, aber vom Handler
+                                       wieder geoeffnet: nachgesperrt */
     volatile LONG      Stop;
 
     /*  Abfragebetrieb: keine nutzbare Leitung (BIOS liess 0/255 stehen,

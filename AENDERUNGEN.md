@@ -1,3 +1,51 @@
+# Fassung 2026.11.17.65 -- Durchsicht der Fassungen .52 bis .64 (Host-Controller)
+
+Durchgesehen: a55e942 bis 40f6e02 (Abfragebetrieb, Sicherungstakt, PCI-Suche,
+BIOS-Uebergabe/SMI, Setup-Warten).  Gefunden und behoben:
+
+- **Sicherungstakt lief den FreeBSD-Handler ungesperrt neben dem ISR.**
+  Seit .62 weckt der 50-ms-Takt den Faden auch ohne Unterbrechung.  Der
+  Handler lief dann mit offener Freigabe; sperrt der ISR mitten im Lauf,
+  oeffnet der Handler gleich wieder (xhci_interrupt schreibt IMAN mit dem
+  vorher gelesenen IE zurueck).  Folge: Leitung oben, ISR meldet
+  "gesperrt, nicht meins" -- auf einem Prozessor Haenger.  Jetzt sperrt der
+  Faden vor jedem Handlerlauf selbst (KeSynchronizeExecution, nur wenn der
+  ISR nicht schon gesperrt hat).  ntintr.c.
+- **EHCI/xHCI: Handler oeffnet die Freigabe waehrend des gesperrten Laufs.**
+  Auch ohne Takt: ehci_interrupt (PCD) und ehci_pcd_enable schreiben
+  USBINTR = sc_eintrs, waehrend wir gesperrt haben.  Der ISR prueft jetzt
+  im gesperrten Zustand, ob Freigabe UND Ereignis anliegen, und sperrt dann
+  nach (Saved uebernimmt den vom Handler gewollten Wert), statt FALSE zu
+  melden.  Nur EHCI und xHCI; UHCI/OHCI-Handler fassen den Hauptschalter
+  nicht an.  Zaehler Nachsperre je Baustein.
+- **Abfragebetrieb: INTx abschalten** (Befehlsregister Bit 10).  Sonst
+  zieht der Baustein seine Leitung weiter -- war sie nur deshalb nicht
+  anschliessbar, weil ein anderer Treiber sie exklusiv haelt, haengt dessen
+  Leitung dauerhaft.  ntgeraet.c.
+- **EHCI: SMI auch abschalten, wenn das BIOS den Baustein nicht haelt**
+  (der Kommentar sagte "immer", der Code tat es nur nach Uebernahme; Linux
+  tut es immer).  ehci_pci.c.
+- **Bau mit dem NT-4.0-DDK ging nicht mehr:** ZwLoadDriver ist dort nicht
+  deklariert (nur in den freien Koepfen).  Vorausdeklaration in ntumass.c;
+  der Export ist in NTOSKRNL.EXE 4.0 vorhanden.
+- Diagnosebau NTU_SETUP_BILDSCHIRM: HalDisplayString nach DriverEntry
+  abgeschaltet -- spaeter holt es sich den Bildschirm vom Setup zurueck.
+  ntu_setup_laeuft liegt in INIT.
+
+Pruefstand (QEMU, NEC-xHCI + ICH9-EHCI mit drei UHCI + OHCI, Tastatur,
+Tablet, Maus, Stick): bis zur Anmeldung, alle sechs Bausteine angehaengt,
+verl 0.  Ebenso im erzwungenen Abfragebetrieb (-DNTU_ABFRAGE_ERZWINGEN=1).
+Echte Hardware: noch nicht.
+
+Hinweis Pruefstand: einbau.py schreibt den SYSTEM-Hive mit hivex; mit dem
+aktuellen hivex lehnt NTLDR ihn ab und nimmt SYSTEM.ALT -- es lief dann
+still der ALTE Treiber.  pruefstand/tausch.sh ersetzt nur usbnt.sys und
+laesst die Registry unberuehrt.
+
+Offen (unveraendert): kein Herunterfahren-Rueckruf; xHCI-HSE vom Filter
+nicht erkannt; im grafischen Setup wird auch ohne USB-Quelle bis 3 min
+gewartet.
+
 # Fassung 2026.11.16.64 -- Setup schaltet nicht mehr alle SCSI-Miniports ein
 
 EliteDesk 705 G5, Ereignis 7026 nach der Installation: rund 30 alte

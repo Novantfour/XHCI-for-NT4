@@ -632,6 +632,15 @@ bus_setup_intr (device_t dev, struct resource *r, int flags,
                    device_get_nameunit(dev), r->r_irq, st);
         i->Object  = NULL;
         i->Abfrage = 1;
+
+        /*  INTx abschalten (PCI 2.3, Befehlsregister Bit 10).  Der
+         *  Baustein zieht seine Leitung sonst weiter -- und war sie nur
+         *  nicht anschliessbar, weil ein anderer Treiber sie exklusiv
+         *  haelt, bliebe dessen Leitung dauerhaft oben.  Aeltere Bausteine
+         *  kennen das Bit nicht (fest 0); dort aendert der Schreibzugriff
+         *  nichts.  */
+        pci_write_config(dev, PCIR_COMMAND,
+                         pci_read_config(dev, PCIR_COMMAND, 2) | 0x0400, 2);
         KeInitializeTimer(&i->Takt);
         KeInitializeDpc(&i->TaktDpc, ntu_dpc, i);
         /*  1 ms angefordert; NT 4.0 rundet auf seinen Takt (10-15 ms) --

@@ -1,3 +1,18 @@
+# NSIS-Installer (2026.11.17.66)
+
+installer-nsis/: usbnt.nsi, bau-nsis.sh, LIESMICH.md.  Ergebnis
+bin/2026.11.17.66/usbnt-setup-2026.11.17.66.exe, mit allen fuenf
+Treiberfassungen (UHCINT/OHCINT/EHCINT/XHCINT jetzt ebenfalls aus Stand
+.66).  Der Installer ruft USBINST (pruefen, abschalten, ein, taste), die
+Deinstallation "usbinst aus" -- keine zweite Registry-Logik.
+
+Auf NT 4.0 SP6 (QEMU) erprobt: alle Seiten mit Umlauten, Prueffund PS/2
+nicht vorgewaehlt, Einrichten (Dienst usbnt, Parameters Ausgabe/Taste4/
+Taste5, ConnectMultiplePorts, USBTASTEN im Autostart, Eintrag unter
+"Software"), Start mit dem eingerichteten Treiber, stille Deinstallation
+(Ordner weg, Dienst zum Loeschen vorgemerkt, ConnectMultiplePorts wieder
+0, Autostart und Software-Eintrag entfernt).
+
 # Fassung 2026.11.17.66 -- offene Punkte behoben, Doppelfreigabe beim Hub-Abbau
 
 - **Hub mit Geraeten dahinter abbauen: Detach auf freiem Speicher und

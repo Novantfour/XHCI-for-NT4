@@ -171,6 +171,7 @@ static int        ntum_bereit;
  *  wartet im Textmodus-Setup darauf: NT vergibt die ARC-Namen gleich nach
  *  den Starttreibern, und Setup braucht multi(0)disk(0)cdrom(N).  */
 volatile LONG      ntum_cd_angelegt;
+volatile LONG      ntum_angehaengt;   /* jedes umass-Geraet, auch ohne CD */
 
 
 /* ====================================================================
@@ -1752,6 +1753,8 @@ ntum_attach (device_t dev)
     struct ntum_softc     *sc  = device_get_softc(dev);
     struct usb_attach_arg *uaa = device_get_ivars(dev);
     usb_error_t            err;
+
+    InterlockedIncrement((PLONG)&ntum_angehaengt);
 
     sc->sc_dev         = dev;
     sc->sc_udev        = uaa->device;

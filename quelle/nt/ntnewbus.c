@@ -165,15 +165,20 @@ device_delete_child (device_t parent, device_t child)
         return 0;
     }
 
-    /*  Erst die Kinder, dann das Kind.  Andersherum verliert man den
-     *  Teilbaum eines abgezogenen Hubs im Speicher, und das faellt erst
-     *  nach dem zwanzigsten Ein- und Ausstecken auf.  */
-
-    while (!IsListEmpty(&child->Children)) {
-        e = child->Children.Flink;
-        device_delete_child(child, CONTAINING_RECORD(e, struct ntu_device,
-                                                     Siblings));
-    }
+    /*  Wie FreeBSD (subr_bus.c): ERST das Kind abhaengen, DANN die
+     *  Kinder loeschen, die es uebrig gelassen hat.
+     *
+     *  Bis 2026.11.17.66 stand es andersherum ("erst die Kinder, damit
+     *  der Teilbaum eines abgezogenen Hubs nicht verloren geht").  Dann
+     *  waren die Knoten hinter einem Hub schon frei, wenn uhub_detach
+     *  lief -- und das loescht sie ueber usb_free_device ->
+     *  usb_detach_device -> device_delete_child(hub, iface->subdev)
+     *  noch einmal: Detach auf freiem Speicher, RemoveEntryList auf
+     *  freiem Speicher, doppelte Freigabe von softc und Knoten.  Trat
+     *  auf beim Abziehen eines Hubs mit Geraeten dahinter und beim
+     *  Abkonfigurieren des Wurzelhubs (Herunterfahren).  Die Schleife
+     *  danach nimmt mit, was der Treiber nicht selbst geloescht hat --
+     *  der Teilbaum geht also weiterhin nicht verloren.  */
 
     if (child->Attached != 0) {
         ntu_devfn f = (ntu_devfn)ntu_method(child->Driver, "device_detach");
@@ -183,6 +188,12 @@ device_delete_child (device_t parent, device_t child)
         }
 
         child->Attached = 0;
+    }
+
+    while (!IsListEmpty(&child->Children)) {
+        e = child->Children.Flink;
+        device_delete_child(child, CONTAINING_RECORD(e, struct ntu_device,
+                                                     Siblings));
     }
 
     if (parent != 0) {
@@ -216,9 +227,23 @@ bus_generic_detach (device_t dev)
     return bus_detach_children(dev);
 }
 
+int ntu_dev_method_call (device_t dev, const char *name);
+
+/*  Wie FreeBSD: DEVICE_SHUTDOWN an alle angehaengten Kinder.  Bis
+ *  2026.11.17.66 ein leerer Stumpf -- usb_shutdown (usb_controller.c)
+ *  wurde dadurch nie erreicht.  */
 int
 bus_generic_shutdown (device_t dev)
 {
+    LIST_ENTRY *e;
+
+    for (e = dev->Children.Flink; e != &dev->Children; e = e->Flink) {
+        device_t c = CONTAINING_RECORD(e, struct ntu_device, Siblings);
+
+        if (c->Attached != 0) {
+            (void)ntu_dev_method_call(c, "device_shutdown");
+        }
+    }
     return 0;
 }
 

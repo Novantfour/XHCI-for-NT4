@@ -359,6 +359,8 @@ typedef struct ntu_intr {
     ULONG              FremdGesp;   /* davon, weil gesperrt       */
     ULONG              Nachsperre;  /* gesperrt, aber vom Handler
                                        wieder geoeffnet: nachgesperrt */
+    volatile LONG      UhciFehler;  /* UHCI: im ISR quittierte HSE/HCPE,
+                                       der Faden meldet sie           */
     volatile LONG      Stop;
 
     /*  Abfragebetrieb: keine nutzbare Leitung (BIOS liess 0/255 stehen,

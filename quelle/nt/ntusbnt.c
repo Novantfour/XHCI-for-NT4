@@ -441,6 +441,9 @@ ntu_herz_body (PVOID ctx)
  *  Faden genau die Zeitgeber abarbeitet.
  * ==================================================================== */
 
+/*  Unbenanntes Geraet nur fuer IoRegisterShutdownNotification.  */
+static PDEVICE_OBJECT ntu_abschalt_dev;
+
 static VOID NtuUnload (PDRIVER_OBJECT drv);
 NTU_PAGED(NtuUnload)
 
@@ -454,6 +457,12 @@ NtuUnload (PDRIVER_OBJECT drv)
     ntu_printf("usb: entladen\n");
 
     ntu_steuer_delete();
+
+    if (ntu_abschalt_dev != 0) {
+        IoUnregisterShutdownNotification(ntu_abschalt_dev);
+        IoDeleteDevice(ntu_abschalt_dev);
+        ntu_abschalt_dev = 0;
+    }
 
 #ifdef NTU_HERZSCHLAG
     ntu_thread_stop(&ntu_herz);
@@ -524,6 +533,134 @@ ntu_setup_laeuft (VOID)
 #endif
 NTSTATUS DriverEntry (PDRIVER_OBJECT drv, PUNICODE_STRING reg);
 #pragma alloc_text(INIT, DriverEntry)
+
+/* ====================================================================
+ *  Herunterfahren
+ *
+ *  Beim Neustart laufen die Bausteine sonst weiter: sie lesen ihre
+ *  Listen per DMA aus dem Speicher, den BIOS und naechstes System schon
+ *  neu belegen, und manche BIOSse haengen beim Warmstart an einem
+ *  laufenden EHCI/xHCI (Linux haelt sie deshalb an, ehci_shutdown /
+ *  xhci_shutdown).
+ *
+ *  Aber: NT 4.0 schickt IRP_MJ_SHUTDOWN an die Angemeldeten in Phase 0,
+ *  die Dateisysteme werden erst in Phase 1 geleert.  Ein USB-Stick mit
+ *  FAT verloere dann seine letzten Daten.  Bausteine, an denen (auch
+ *  hinter Hubs) ein Massenspeicher haengt, bleiben deshalb laufen; das
+ *  ist der bisherige Zustand und schadet nicht mehr als bisher.
+ * ==================================================================== */
+
+static BOOLEAN
+ntu_hat_massenspeicher (device_t d)
+{
+    LIST_ENTRY *e;
+
+    /*  Der Massenspeichertreiber heisst hier "ntumass" (ober/ntumass.c),
+     *  nicht "umass".  */
+    if (d->Driver != 0 && d->Driver->name != 0 &&
+        (strcmp(d->Driver->name, "ntumass") == 0 ||
+         strcmp(d->Driver->name, "umass") == 0)) {
+        return TRUE;
+    }
+    for (e = d->Children.Flink; e != &d->Children; e = e->Flink) {
+        if (ntu_hat_massenspeicher(CONTAINING_RECORD(e, struct ntu_device,
+                                                     Siblings))) {
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
+
+static VOID
+ntu_baustein_anhalten (device_t d, UCHAR pi)
+{
+    ntu_space_tag    t = d->Res->r_tag;
+    ntu_space_handle h = d->Res->r_handle;
+    ULONG            op, n;
+
+    switch (pi) {
+
+        case 0x00:                                  /* UHCI */
+            ntu_w2(t, h, 0x04, 0);                  /* USBINTR */
+            ntu_w2(t, h, 0x00, 0);                  /* USBCMD: RS aus */
+            break;
+
+        case 0x10:                                  /* OHCI */
+            ntu_w4(t, h, 0x14, 0xFFFFFFFFul);       /* alle Quellen aus */
+            ntu_w4(t, h, 0x04, ntu_r4(t, h, 0x04) & 0x200);  /* HCFS=Reset, RWC behalten */
+            break;
+
+        case 0x20:                                  /* EHCI */
+            op = ntu_r1(t, h, 0);
+            ntu_w4(t, h, op + 0x08, 0);             /* USBINTR */
+            ntu_w4(t, h, op + 0x00, ntu_r4(t, h, op + 0x00) & ~0x31ul); /* RS, PSE, ASE */
+            for (n = 0; n < 20 && (ntu_r4(t, h, op + 0x04) & 0x1000) == 0; n += 1) {
+                KeStallExecutionProcessor(125);     /* HCHalted, max. 2,5 ms */
+            }
+            ntu_w4(t, h, op + 0x40, 0);             /* CONFIGFLAG: Anschluesse an die Begleiter */
+            break;
+
+        case 0x30:                                  /* xHCI */
+            op = ntu_r1(t, h, 0);
+            ntu_w4(t, h, op + 0x00, ntu_r4(t, h, op + 0x00) & ~0x0Dul); /* RS, INTE, HSEE */
+            for (n = 0; n < 160 && (ntu_r4(t, h, op + 0x04) & 0x01) == 0; n += 1) {
+                KeStallExecutionProcessor(100);     /* HCH, Spez.: max. 16 ms */
+            }
+            break;
+    }
+}
+
+static NTSTATUS
+ntu_herunterfahren (PDEVICE_OBJECT dev, PIRP irp)
+{
+    ULONG i;
+
+    if (dev == ntu_abschalt_dev) {
+        for (i = 0; i < ntu_hc_count; i += 1) {
+            device_t d = ntu_hc_dev[i];
+
+            if (d == 0 || d->Res == 0) {
+                continue;
+            }
+            if (ntu_hat_massenspeicher(d)) {
+                ntu_printf("usb: Herunterfahren: hc%u bleibt an (Massenspeicher)\n", i);
+                continue;
+            }
+            /*  1. Der FreeBSD-Weg: DEVICE_SHUTDOWN -> usb_shutdown ->
+             *     usb_bus_shutdown im Erkundungsfaden: Kinder abschalten,
+             *     Wurzelhub abkonfigurieren, no_explore, dann
+             *     set_hw_power_sleep(SHUTDOWN) -- der Baustein haelt an.
+             *     Braucht den Unterbrechungsfaden noch.
+             *  2. Dann Faden und Sicherungstakt beenden.  Ein nur von
+             *     aussen angehaltener Baustein unter laufendem Stapel
+             *     fuehrt sonst zu Zeitueberschreitungen, Neuaufzaehlung
+             *     und "host controller halted" alle 50 ms (am Pruefstand
+             *     so gesehen).
+             *  3. Zuletzt die Register selbst, falls FreeBSD etwas
+             *     laufen liess (EHCI: CONFIGFLAG).  */
+            {
+                extern int ntu_dev_method_call (device_t, const char *);
+                ntu_intr *q;
+
+                (void)ntu_dev_method_call(d, "device_shutdown");
+
+                q = (ntu_intr *)d->Intr;
+                if (q != 0) {
+                    KeCancelTimer(&q->Takt);
+                    q->Stop = 1;
+                    KeSetEvent(&q->Wake, 0, FALSE);
+                }
+            }
+            ntu_baustein_anhalten(d, ntu_hc[i].ProgIf);
+            ntu_printf("usb: Herunterfahren: hc%u angehalten\n", i);
+        }
+    }
+
+    irp->IoStatus.Status      = STATUS_SUCCESS;
+    irp->IoStatus.Information = 0;
+    IoCompleteRequest(irp, IO_NO_INCREMENT);
+    return STATUS_SUCCESS;
+}
 
 NTSTATUS
 DriverEntry (PDRIVER_OBJECT drv, PUNICODE_STRING reg)
@@ -751,6 +888,18 @@ DriverEntry (PDRIVER_OBJECT drv, PUNICODE_STRING reg)
             HalDisplayString((PUCHAR)"usbnt: Setup -- warte auf das USB-CD/DVD-Laufwerk\n");
         }
         for (z = 0; z < grenze && ntum_cd_angelegt == 0; z += 1) {
+            extern volatile LONG ntum_angehaengt;
+
+            /*  Grafisches Setup ohne jeden USB-Massenspeicher: dann kommt
+             *  die Quelle nicht von USB (IDE/SATA-CD, Festplatte nach
+             *  winnt /b).  Ein USB-Laufwerk haengt sich in wenigen
+             *  Sekunden als umass an; erst danach dauert das Anlaufen der
+             *  Scheibe.  Nach 45 s ohne umass nicht drei Minuten weiter
+             *  warten.  */
+            if (grafisch && z >= 45 * 4 && ntum_angehaengt == 0) {
+                HalDisplayString((PUCHAR)"usbnt: kein USB-Massenspeicher -- Quelle nicht von USB, weiter\n");
+                break;
+            }
             KeDelayExecutionThread(KernelMode, FALSE, &t);
             if (grafisch && z % 40 == 39) {
                 HalDisplayString((PUCHAR)"usbnt: ... noch kein USB-CD/DVD (weitere 10 s)\n");
@@ -789,6 +938,21 @@ DriverEntry (PDRIVER_OBJECT drv, PUNICODE_STRING reg)
     /*  Das Steuergeraet zuletzt: erst wenn die Tabelle steht, hat das
      *  Werkzeug etwas zu lesen.  Scheitert es, laeuft der Treiber
      *  trotzdem -- nur ohne Diagnose.  */
+
+    /*  Rueckruf beim Herunterfahren (siehe ntu_herunterfahren).  Der
+     *  Abfertiger fuer IRP_MJ_SHUTDOWN gilt fuer alle Geraete dieses
+     *  Treibers; er handelt nur beim eigenen Geraet.  */
+    drv->MajorFunction[IRP_MJ_SHUTDOWN] = ntu_herunterfahren;
+    if (NT_SUCCESS(IoCreateDevice(drv, 0, NULL, FILE_DEVICE_UNKNOWN, 0,
+                                  FALSE, &ntu_abschalt_dev))) {
+        ntu_abschalt_dev->Flags &= ~DO_DEVICE_INITIALIZING;
+        if (!NT_SUCCESS(IoRegisterShutdownNotification(ntu_abschalt_dev))) {
+            IoDeleteDevice(ntu_abschalt_dev);
+            ntu_abschalt_dev = 0;
+        }
+    } else {
+        ntu_abschalt_dev = 0;
+    }
 
     ntu_printf("usb: DriverEntry fertig\n");
 #ifdef NTU_SETUP_BILDSCHIRM

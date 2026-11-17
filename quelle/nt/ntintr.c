@@ -126,7 +126,16 @@ ntu_intr_erkannt (ntu_intr *i)
     switch (i->ProgIf) {
 
         case PCIP_SERIALBUS_USB_UHCI:
-            return (ntu_r2(i->Tag, i->Handle, UHCI_STS) & 0x3F) != 0;
+
+            /*  0x1F: USBINT, USBEI, RD, HSE, HCPE.  NICHT HCHalted
+             *  (0x20): das ist ein Zustand, kein Ereignis, und kein
+             *  Schreibzugriff loescht es.  Mit 0x3F nahm ein angehaltener
+             *  Baustein (Fehler, Aussetzen) jede Unterbrechung eines
+             *  Nachbarn auf derselben Leitung an -- NT ruft bei
+             *  pegelgesteuerten Leitungen nach dem ersten TRUE keinen
+             *  weiteren ISR, der Nachbar blieb unbedient.  */
+
+            return (ntu_r2(i->Tag, i->Handle, UHCI_STS) & 0x1F) != 0;
 
         case PCIP_SERIALBUS_USB_OHCI: {
 
@@ -343,6 +352,24 @@ ntu_isr (PKINTERRUPT unused, PVOID ctx)
             return TRUE;
         }
 
+        /*  UHCI: HSE (0x08) und HCPE (0x10) loesen die Leitung aus, ohne
+         *  dass UHCI_INTR sie abschalten kann -- die Sperre wirkt auf sie
+         *  nicht.  Bis der Faden laeuft, kaeme der ISR endlos wieder (auf
+         *  einem Prozessor kaeme der Faden nie dran).  Deshalb hier
+         *  quittieren (RW1C) und merken; der Faden meldet es.  Der
+         *  Baustein ist danach ohnehin angehalten.  */
+
+        if (i->ProgIf == PCIP_SERIALBUS_USB_UHCI) {
+
+            USHORT sts = ntu_r2(i->Tag, i->Handle, UHCI_STS);
+
+            if ((sts & 0x18) != 0) {
+                ntu_w2(i->Tag, i->Handle, UHCI_STS, (USHORT)(sts & 0x18));
+                i->UhciFehler |= (sts & 0x18);
+                return TRUE;
+            }
+        }
+
         InterlockedIncrement((LONG *)&ntu_zaehler.Fremdunterbr);
         i->Fremd += 1;
         i->FremdGesp += 1;
@@ -423,6 +450,13 @@ ntu_ithread_body (PVOID ctx)
         }
 
         i->Handler(i->Arg);          /* der unveraenderte FreeBSD-Handler */
+
+        if (i->UhciFehler != 0) {
+            LONG f = InterlockedExchange((LONG *)&i->UhciFehler, 0);
+            ntu_printf("usb: UHCI-Baustein meldet%s%s -- angehalten\n",
+                       (f & 0x08) ? " Host System Error" : "",
+                       (f & 0x10) ? " Host Controller Process Error" : "");
+        }
 
         /*  xHCI: Anschlussaenderungen nachholen, falls der Baustein
          *  USBSTS.PCD nicht setzt -- ober/ntxhcipcd.c.  Auf PASSIVE_LEVEL

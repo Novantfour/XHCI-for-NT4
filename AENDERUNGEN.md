@@ -1,3 +1,62 @@
+# Fassung 2026.11.17.66 -- offene Punkte behoben, Doppelfreigabe beim Hub-Abbau
+
+- **Hub mit Geraeten dahinter abbauen: Detach auf freiem Speicher und
+  doppelte Freigabe** (ntnewbus.c, device_delete_child).  Die Unterlage
+  loeschte erst die Kinder, dann das Kind; FreeBSD tut es umgekehrt, und
+  uhub_detach verlaesst sich darauf (es loescht seine Kinder selbst ueber
+  usb_free_device -> usb_detach_device -> device_delete_child).  Folge:
+  Detach-Routine und RemoveEntryList auf schon freigegebenem Speicher,
+  "POOL doppelte Freigabe" fuer softc und Knoten.  Betroffen: Abziehen
+  eines Hubs mit angeschlossenen Geraeten (auch Tastaturen mit
+  eingebautem Hub) und Abkonfigurieren des Wurzelhubs.  Jetzt wie
+  FreeBSD: erst abhaengen, dann Uebriggebliebenes loeschen.  Am Pruefstand
+  beim Herunterfahren nachgewiesen (Hub + Tastatur am EHCI): vorher vier
+  Doppelfreigaben und zwei fremde Zeiger, jetzt keine.  Das Abziehen
+  eines Hubs selbst laesst sich in QEMU nicht pruefen (QEMU bricht mit
+  einer Assertion ab).
+- **Herunterfahren**: IoRegisterShutdownNotification an einem eigenen,
+  unbenannten Geraet.  Je Baustein ohne Massenspeicher der FreeBSD-Weg
+  (DEVICE_SHUTDOWN -> usb_shutdown -> usb_bus_shutdown: Kinder abhaengen,
+  Wurzelhub abkonfigurieren, set_hw_power_sleep(SHUTDOWN)), danach Faden
+  und Sicherungstakt beenden und die Register anhalten (EHCI: CONFIGFLAG
+  0).  Bausteine mit Massenspeicher (auch hinter Hubs) bleiben an: NT 4.0
+  leert die Dateisysteme erst in Phase 1, nach dem Rueckruf.
+  bus_generic_shutdown war ein leerer Stumpf und reicht DEVICE_SHUTDOWN
+  jetzt an die Kinder weiter.  Erster Versuch, die Bausteine nur von aussen
+  anzuhalten, war falsch (Zeitueberschreitungen, Neuaufzaehlung, "host
+  controller halted" alle 50 ms) -- deshalb der FreeBSD-Weg.
+- **UHCI-Filter 0x3F -> 0x1F**: HCHalted ist ein Zustand, kein Ereignis.
+  Ein angehaltener UHCI nahm jede Unterbrechung eines Nachbarn an
+  derselben Leitung an.
+- **UHCI HSE/HCPE**: lassen sich ueber UHCI_INTR nicht sperren.  Der ISR
+  quittiert sie im gesperrten Zustand selbst, der Faden meldet sie.
+- **Grafisches Setup ohne USB-Quelle**: nach 45 s ohne jeden
+  USB-Massenspeicher nicht mehr bis 3 min weiter warten.
+- xHCI-HSE (vorher als offen gefuehrt): kein Fehler.  HSE meldet sich laut
+  xHCI-Spezifikation ausserhalb der Unterbrechungsleitung (SERR), nicht
+  ueber den Interrupter; den Filter darum zu erweitern, nahm nur einem
+  Nachbarn Unterbrechungen weg.
+
+Pruefstand: Start bis zur Anmeldung, Maeuse ab- und wieder angesteckt,
+Herunterfahren und Neustart mit Stick am xHCI ("bleibt an") und Hub mit
+Tastatur am EHCI.  pruefstand/ausschalten-tasten.sh meldet an und faehrt
+ueber die Tastatur herunter.
+
+## Seit wann die Fehler drin waren
+
+| Fehler | eingefuehrt |
+|---|---|
+| Hub-Abbau: Kinder zuerst geloescht | schon im Quellstand vom 27.09.2026 (usb-nt4-komplett), Git: e2c08e0 |
+| bus_generic_shutdown leer, kein Herunterfahren | ebenso |
+| UHCI-Filter mit HCHalted, HSE/HCPE nicht sperrbar | ebenso |
+| EHCI: Handler oeffnet USBINTR im gesperrten Lauf (.65 behoben) | ebenso (ISR-Sperrlogik) |
+| Handler ungesperrt neben dem ISR (.65 behoben) | b4f60d9, 2026.11.15.56 (Sicherungstakt) |
+| Abfragebetrieb ohne INTx-Abschaltung (.65 behoben) | b4f60d9, 2026.11.15.56 |
+| HalDisplayString nach DriverEntry (.65 behoben) | b4f60d9, 2026.11.15.56 |
+| ZwLoadDriver ohne Deklaration, DDK-Bau bricht (.65 behoben) | fc08ee9, 2026.11.15.54 |
+| 3 min Warten ohne USB-Quelle | fcfd280, 2026.11.16.61 |
+| EHCI-SMI nur nach BIOS-Uebernahme aus (.65 behoben) | 40f6e02, 2026.11.16.64 |
+
 # Fassung 2026.11.17.65 -- Durchsicht der Fassungen .52 bis .64 (Host-Controller)
 
 Durchgesehen: a55e942 bis 40f6e02 (Abfragebetrieb, Sicherungstakt, PCI-Suche,

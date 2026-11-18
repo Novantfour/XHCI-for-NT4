@@ -57,20 +57,62 @@ typedef struct _PCI_ENTRY {
 
 #pragma pack()
 
-#define MAX_ENTRIES 128
+/*
+    Ablage.  Beides aus dem Auslagerungsspeicher: gelesen wird nur in
+    DispatchControl, und das laeuft passiv (gepufferte E/A).  Frueher
+    lagen 60 KB Bericht und die Liste fest im residenten .data.
 
-static PCI_ENTRY gList[MAX_ENTRIES];
-static ULONG     gListCount;
+    512 Eintraege: 128 reichten auf groesseren Brettern nicht (jede
+    Funktion zaehlt, Ryzen-Systeme haben schon ohne Steckkarten 40-60).
+*/
 
-#define REPORT_MAX  60000
+#define MAX_ENTRIES 512
+#define REPORT_MAX  (160 * 1024)
+#define POOL_TAG    'nScP'
 
-static char  gReport[REPORT_MAX];
-static ULONG gUsed;
+static PCI_ENTRY* gList;
+static ULONG      gListCount;
+static ULONG      gListLost;        /* gefunden, aber nicht mehr in der Liste */
+
+static char*      gReport;
+static ULONG      gUsed;
+
+/*  Abschnitte nach den Regeln aus TREIBER-BAU-NT4.md: alles, was nur der
+ *  Durchlauf beim Laden braucht, nach INIT (wird danach freigegeben);
+ *  die Abfertigung nach PAGE (laeuft passiv).  Resident bleibt nichts
+ *  ausser den Zeigern oben.  */
+
+NTSTATUS DriverEntry(PDRIVER_OBJECT drv, PUNICODE_STRING reg);
+static void Put(const char* s);
+static void Line(const char* s);
+static void PutF(const char* fmt, ULONG a, ULONG b, ULONG c, ULONG d);
+static const char* ClassName(UCHAR base, UCHAR sub);
+static const char* VendorName(USHORT v);
+static void ReportDevice(ULONG bus, ULONG dev, ULONG fn, PPCI_COMMON_CONFIG c);
+static void Scan(void);
+static NTSTATUS DispatchOpenClose(PDEVICE_OBJECT dev, PIRP irp);
+static NTSTATUS DispatchControl(PDEVICE_OBJECT dev, PIRP irp);
+static VOID DriverUnload(PDRIVER_OBJECT drv);
+
+#pragma alloc_text(INIT, DriverEntry)
+#pragma alloc_text(INIT, Put)
+#pragma alloc_text(INIT, Line)
+#pragma alloc_text(INIT, PutF)
+#pragma alloc_text(INIT, ClassName)
+#pragma alloc_text(INIT, VendorName)
+#pragma alloc_text(INIT, ReportDevice)
+#pragma alloc_text(INIT, Scan)
+#pragma alloc_text(PAGE, DispatchOpenClose)
+#pragma alloc_text(PAGE, DispatchControl)
+#pragma alloc_text(PAGE, DriverUnload)
 
 /* ------------------------------------------------------------------ */
 
 static void Put(const char* s)
 {
+    if (gReport == NULL) {
+        return;
+    }
     while (*s && gUsed < REPORT_MAX - 1) {
         gReport[gUsed++] = *s++;
     }
@@ -144,6 +186,7 @@ static const char* ClassName(UCHAR base, UCHAR sub)
     case 0x0B: return "Prozessor";
     case 0x0C:
         if (sub == 0x03) return "Serieller Bus, USB";
+        if (sub == 0x00) return "Serieller Bus, FireWire";
         if (sub == 0x05) return "Serieller Bus, SMBus";
         return "Serieller Bus";
     case 0x0D: return "Funk";
@@ -216,15 +259,49 @@ static void ReportDevice(ULONG bus, ULONG dev, ULONG fn,
     Put(ClassName(c->BaseClass, c->SubClass));
     Line("");
 
+    if (c->BaseClass == 0x0C && c->SubClass == 0x03) {
+        Put("  USB            ");
+        Put(c->ProgIf == 0x00 ? "UHCI (USB 1.1)" :
+            c->ProgIf == 0x10 ? "OHCI (USB 1.1)" :
+            c->ProgIf == 0x20 ? "EHCI (USB 2.0)" :
+            c->ProgIf == 0x30 ? "xHCI (USB 3.x)" :
+            c->ProgIf == 0xFE ? "USB-Geraet, kein Controller" :
+                                "herstellereigen");
+        Line("");
+    }
+
     PutF("  Revision       %02x\r\n", c->RevisionID, 0, 0, 0);
+
+    /*  Befehlsregister: ob das BIOS den Baustein ueberhaupt freigeschaltet
+     *  hat.  Ein USB-Controller mit "Speicher aus" bekommt keinen
+     *  Treiber zum Laufen, egal was der Treiber tut.  */
+    PutF("  Befehl         %04x  E/A %u  Speicher %u  Busmaster %u",
+         c->Command, (c->Command & 1) != 0, (c->Command & 2) != 0,
+         (c->Command & 4) != 0);
+    if (c->Command & 0x400) {
+        Put("  INTx aus");
+    }
+    Line("");
     PutF("  Kopftyp        %02x", c->HeaderType & 0x7F, 0, 0, 0);
     if (c->HeaderType & 0x80) {
         Put("   mehrere Funktionen");
     }
     Line("");
 
+    if ((c->HeaderType & 0x7F) == 1) {
+
+        /*  PCI-PCI-Bruecke (Kopftyp 1).  Das NT-4.0-DDK kennt im
+         *  PCI_COMMON_CONFIG nur den Kopftyp 0; die Busnummern stehen bei
+         *  0x18/0x19/0x1A.  Hier sieht man, wo Busse hinter Luecken
+         *  herkommen (Ryzen: 00:08.1 -> Bus 0a).  */
+        PUCHAR r = (PUCHAR)c;
+        PutF("  Busse          primaer %02x  sekundaer %02x  bis %02x\r\n",
+             r[0x18], r[0x19], r[0x1A], 0);
+        return;
+    }
+
     if ((c->HeaderType & 0x7F) != 0) {
-        Line("  (Bruecke, keine Basisadressen aufgefuehrt)");
+        Line("  (CardBus-Bruecke, keine Basisadressen aufgefuehrt)");
         return;
     }
 
@@ -251,6 +328,23 @@ static void ReportDevice(ULONG bus, ULONG dev, ULONG fn,
 
         if (b & 1) {
             PutF("    BAR%u  Port    %04x\r\n", i, b & 0xFFFFFFFC, 0, 0);
+        } else if ((b & 0x06) == 0x04 && i + 1 < PCI_TYPE0_ADDRESSES) {
+
+            /*  64-Bit-Speicher: die naechste Basisadresse ist die obere
+             *  Haelfte, kein eigener Bereich.  Frueher stand sie als
+             *  eigener "Speicher"-Eintrag da.  */
+            ULONG hi = c->u.type0.BaseAddresses[i + 1];
+
+            PutF("    BAR%u  Speicher %08x%08x  64 Bit", i, hi,
+                 b & 0xFFFFFFF0, 0);
+            if (b & 0x08) {
+                Put("  vorablesbar");
+            }
+            if (hi != 0) {
+                Put("  oberhalb 4 GB");
+            }
+            Line("");
+            i += 1;
         } else {
             PutF("    BAR%u  Speicher %08x", i, b & 0xFFFFFFF0, 0, 0);
             if (b & 0x08) {
@@ -285,6 +379,9 @@ static void Scan(void)
     ULONG bus, dev, fn;
     ULONG found = 0;
     ULONG buses = 0;
+    ULONG last  = 0;
+
+    PAGED_CODE();
 
     gUsed = 0;
     gReport[0] = 0;
@@ -337,7 +434,11 @@ static void Scan(void)
                 found += 1;
                 onThisBus += 1;
 
-                if (gListCount < MAX_ENTRIES) {
+                last = bus;
+
+                if (gList == NULL || gListCount >= MAX_ENTRIES) {
+                    gListLost += 1;
+                } else {
 
                     PCI_ENTRY* e = &gList[gListCount];
                     ULONG      q;
@@ -387,18 +488,27 @@ static void Scan(void)
         }
 
         /*
-            Ohne Bruecken gibt es keine hohen Busnummern.  Nach dem
-            ersten leeren Bus jenseits von Bus 8 wird abgebrochen, damit
-            der Durchlauf nicht 256 mal ins Leere greift.
-        */
+            Frueher: nach dem ersten leeren Bus jenseits von Bus 8 Schluss.
+            Das verlor auf Ryzen-Brettern alles hinter einer Luecke -- der
+            HP EliteDesk 705 G5 hat seine xHCI auf Bus 0a, Bus 09 ist leer.
+            Der USB-Treiber sucht seit 2026.11.15.57 alle 256 Busse ab.
 
-        if (bus > 8 && onThisBus == 0) {
-            break;
-        }
+            Gefahrlos: HalGetBusData liefert fuer einen Bus, den die HAL
+            nicht kennt, sofort 0 (HALAPIC SP6: HalGetBusDataByOffset ->
+            HaliReferenceHandlerForConfigSpace, ohne Handler kein Zugriff).
+            Handler legt HalpInitializePciBus fuer die vom BIOS gemeldeten
+            Busse und fuer alle Busse hinter Bruecken an.
+        */
+        (void)onThisBus;
     }
 
     Line("");
-    PutF("Zusammen %u Geraete auf %u Bussen.\r\n", found, buses, 0, 0);
+    PutF("Zusammen %u Geraete auf %u Bussen, hoechster Bus %02x.\r\n",
+         found, buses, last, 0);
+    if (gListLost != 0) {
+        PutF("%u davon nicht in der Liste fuer den Geraetemanager (voll).\r\n",
+             gListLost, 0, 0, 0);
+    }
     Line("Es wurde nichts geschrieben, nur gelesen.");
 }
 
@@ -408,6 +518,7 @@ static void Scan(void)
 
 static NTSTATUS DispatchOpenClose(PDEVICE_OBJECT dev, PIRP irp)
 {
+    PAGED_CODE();
     UNREFERENCED_PARAMETER(dev);
 
     irp->IoStatus.Status      = STATUS_SUCCESS;
@@ -422,23 +533,32 @@ static NTSTATUS DispatchControl(PDEVICE_OBJECT dev, PIRP irp)
     NTSTATUS st = STATUS_INVALID_DEVICE_REQUEST;
     ULONG    n  = 0;
 
+    PAGED_CODE();
     UNREFERENCED_PARAMETER(dev);
 
     if (s->Parameters.DeviceIoControl.IoControlCode == IOCTL_PCI_GET_LIST) {
 
-        ULONG want = sizeof(ULONG) + gListCount * sizeof(PCI_ENTRY);
         ULONG have = s->Parameters.DeviceIoControl.OutputBufferLength;
 
-        if (have < want) {
+        /*  Passt nicht alles hinein, so viele Eintraege wie Platz haben,
+         *  mit der Zahl der gelieferten vorn.  So bleiben Geraetemanager
+         *  mit Platz fuer 128 Eintraege lauffaehig, statt bei mehr als
+         *  128 Geraeten gar keine PCI-Liste mehr zu bekommen.  */
+
+        if (have < sizeof(ULONG) || gList == NULL) {
             st = STATUS_BUFFER_TOO_SMALL;
         } else {
-            PUCHAR out = (PUCHAR)irp->AssociatedIrp.SystemBuffer;
+            PUCHAR out  = (PUCHAR)irp->AssociatedIrp.SystemBuffer;
+            ULONG  zahl = (have - sizeof(ULONG)) / sizeof(PCI_ENTRY);
 
-            *(PULONG)out = gListCount;
+            if (zahl > gListCount) {
+                zahl = gListCount;
+            }
+            *(PULONG)out = zahl;
             RtlCopyMemory(out + sizeof(ULONG), gList,
-                          gListCount * sizeof(PCI_ENTRY));
+                          zahl * sizeof(PCI_ENTRY));
             st = STATUS_SUCCESS;
-            n  = want;
+            n  = sizeof(ULONG) + zahl * sizeof(PCI_ENTRY);
         }
 
     } else if (s->Parameters.DeviceIoControl.IoControlCode == IOCTL_PCI_GET_REPORT) {
@@ -446,7 +566,7 @@ static NTSTATUS DispatchControl(PDEVICE_OBJECT dev, PIRP irp)
         ULONG want = gUsed + 1;
         ULONG have = s->Parameters.DeviceIoControl.OutputBufferLength;
 
-        if (have < want) {
+        if (gReport == NULL || have < want) {
             st = STATUS_BUFFER_TOO_SMALL;
         } else {
             RtlCopyMemory(irp->AssociatedIrp.SystemBuffer, gReport, want);
@@ -465,11 +585,21 @@ static VOID DriverUnload(PDRIVER_OBJECT drv)
 {
     UNICODE_STRING link;
 
+    PAGED_CODE();
+
     RtlInitUnicodeString(&link, LINKNAME);
     IoDeleteSymbolicLink(&link);
 
     if (drv->DeviceObject) {
         IoDeleteDevice(drv->DeviceObject);
+    }
+    if (gList != NULL) {
+        ExFreePool(gList);
+        gList = NULL;
+    }
+    if (gReport != NULL) {
+        ExFreePool(gReport);
+        gReport = NULL;
     }
 }
 
@@ -479,17 +609,39 @@ NTSTATUS DriverEntry(PDRIVER_OBJECT drv, PUNICODE_STRING reg)
     PDEVICE_OBJECT dev;
     NTSTATUS       st;
 
+    PAGED_CODE();
     UNREFERENCED_PARAMETER(reg);
+
+    gList   = (PCI_ENTRY*)ExAllocatePoolWithTag(PagedPool,
+                              MAX_ENTRIES * sizeof(PCI_ENTRY), POOL_TAG);
+    gReport = (char*)ExAllocatePoolWithTag(PagedPool, REPORT_MAX, POOL_TAG);
+    if (gList == NULL || gReport == NULL) {
+        if (gList != NULL)   ExFreePool(gList);
+        if (gReport != NULL) ExFreePool(gReport);
+        gList = NULL;
+        gReport = NULL;
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
 
     RtlInitUnicodeString(&name, DEVNAME);
     RtlInitUnicodeString(&link, LINKNAME);
 
     st = IoCreateDevice(drv, 0, &name, FILE_DEVICE_UNKNOWN, 0, FALSE, &dev);
-    if (!NT_SUCCESS(st)) return st;
+    if (!NT_SUCCESS(st)) {
+        ExFreePool(gList);
+        ExFreePool(gReport);
+        gList = NULL;
+        gReport = NULL;
+        return st;
+    }
 
     st = IoCreateSymbolicLink(&link, &name);
     if (!NT_SUCCESS(st)) {
         IoDeleteDevice(dev);
+        ExFreePool(gList);
+        ExFreePool(gReport);
+        gList = NULL;
+        gReport = NULL;
         return st;
     }
 

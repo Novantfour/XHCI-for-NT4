@@ -655,6 +655,22 @@ bus_setup_intr (device_t dev, struct resource *r, int flags,
         return 0;
     }
 
+    /*  Leitung angeschlossen: INTx-Sperre (Befehlsregister Bit 10)
+     *  loesen.  Sie kann stehen geblieben sein -- vom BIOS, von einem
+     *  System, das den Baustein mit MSI betrieb, oder von unserem eigenen
+     *  Abfragebetrieb beim vorigen Start, wenn der Warmstart den Baustein
+     *  nicht zuruecksetzt.  Dann kaeme nie eine Unterbrechung, und USB
+     *  liefe still nur im 50-ms-Sicherungstakt.  */
+    {
+        uint32_t cmd = pci_read_config(dev, PCIR_COMMAND, 2);
+
+        if (cmd & 0x0400) {
+            pci_write_config(dev, PCIR_COMMAND, cmd & ~0x0400u, 2);
+            ntu_printf("usb: %s: INTx war abgeschaltet -- eingeschaltet\n",
+                       device_get_nameunit(dev));
+        }
+    }
+
     /*  Sicherungstakt: auch mit angeschlossener Leitung alle 50 ms
      *  nachsehen.  Unter der MPS-HAL mit aus ACPI erzeugter Tabelle (HP
      *  EliteDesk 705 G5) bekam der xHCI eine Leitung, auf der nichts ankam:

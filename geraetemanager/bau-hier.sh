@@ -14,8 +14,15 @@ clang-cl --target=i386-pc-windows-msvc -fms-compatibility -fms-extensions -c -Os
   -DWIN32_LEAN_AND_MEAN=1 -DDEVL=1 -DFPO=0 -DDBG=0 -Ikompat -I$DDK/inc-patched -I$DDK/sdk -Isrc -Foobj/pciscan.obj src/pciscan.c
 llvm-dlltool-18 -m i386 --input-def def/ntoskrnl.def --output-lib obj/ntoskrnl.lib --kill-at
 llvm-dlltool-18 -m i386 --input-def def/hal.def --output-lib obj/hal.lib --kill-at
+# Versionsangaben (pciscan.rc) -- ohne sie werten Virenscanner den
+# Treiber als verdaechtig, und pruefe-bau.py meldet einen Mangel.
+llvm-rc-18 /c 1252 /fo obj/pciscan.res pciscan.rc
 lld-link /nologo /out:obj/PCISCAN.SYS /machine:x86 /subsystem:native,4.00 /version:4.00 /osversion:4.00 /driver \
-  /entry:DriverEntry /base:0x10000 /nodefaultlib /safeseh:no /release obj/pciscan.obj obj/ntoskrnl.lib obj/hal.lib
+  /entry:DriverEntry /base:0x10000 /nodefaultlib /safeseh:no /release obj/pciscan.obj obj/pciscan.res obj/ntoskrnl.lib obj/hal.lib
+# Abschnitte wie beim USB-Treiber: .text/.rdata/.data resident, INIT
+# verwerfbar, PAGE auslagerbar; danach die Pruefsumme neu.
+python3 ../abschnitte.py obj/PCISCAN.SYS
+python3 ../pruefsumme.py obj/PCISCAN.SYS
 # PCISCAN.SYS wird NICHT mehr eingebettet -- liegt als eigene Datei bei.
 # (frueher: mkpayload.py -> src/drvpayload.h)
 # 2. Symbole und Ressourcen

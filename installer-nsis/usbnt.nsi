@@ -16,7 +16,7 @@ SetCompressor /SOLID lzma
 RequestExecutionLevel admin
 
 !ifndef FASSUNG
-  !define FASSUNG "2026.11.17.66"
+  !define FASSUNG "2026.11.18.67"
 !endif
 !ifndef TREIBER                      ; Ordner mit usbnt/uhcint/ohcint/ehcint/xhcint.sys
   !define TREIBER "..\bin\${FASSUNG}"
@@ -110,15 +110,23 @@ Section "USB-Treiber" SecTreiber
   File "${PAKET}\USBSETUP.EXE"
   File "${PAKET}\USBNT.INF"
   File "${PAKET}\LIESMICH.TXT"
-  File "${PAKET}\DEVMGR.EXE"
-  File "${PAKET}\DEVMGR.CPL"
-  File "${PAKET}\PCISCAN.SYS"
-  File "${PAKET}\PCI.IDS"
-  File "${PAKET}\PCIHOLE.EXE"
-  File "${PAKET}\CACERT.PEM"
   File "${PAKET}\USBMAUS.CPL"
   File "${PAKET}\USBMAUSX.DLL"
   File "${PAKET}\USBTASTX.DLL"
+SectionEnd
+
+; PCI-Scan: PCISCAN.SYS liest den PCI-Bus fuer den Geraetemanager.  Liegt
+; die Datei neben USBINST, richtet "usbinst ein" den Dienst PciScan ein
+; (Start automatisch, seit 2026.11.18).  Ohne diesen Bestandteil zeigt der
+; Geraetemanager nur die USB-Geraete.
+Section "PCI-Scan und Gerätemanager" SecPciScan
+  SetOutPath "$INSTDIR"
+  File "/oname=PCISCAN.SYS" "${TREIBER}\pciscan.sys"
+  File "${PAKET}\DEVMGR.EXE"
+  File "${PAKET}\DEVMGR.CPL"
+  File "${PAKET}\PCI.IDS"
+  File "${PAKET}\PCIHOLE.EXE"
+  File "${PAKET}\CACERT.PEM"
 SectionEnd
 
 Section "Zusatzprogramme" SecWerkzeuge
@@ -183,7 +191,9 @@ Section "-Einrichten"
 
   CreateDirectory "$SMPROGRAMS\FreeBSD-USB"
   CreateShortCut  "$SMPROGRAMS\FreeBSD-USB\USB einrichten (USBSETUP).lnk" "$INSTDIR\USBSETUP.EXE"
-  CreateShortCut  "$SMPROGRAMS\FreeBSD-USB\Gerätemanager.lnk" "$INSTDIR\DEVMGR.EXE"
+  ${If} ${FileExists} "$INSTDIR\DEVMGR.EXE"
+    CreateShortCut "$SMPROGRAMS\FreeBSD-USB\Gerätemanager.lnk" "$INSTDIR\DEVMGR.EXE"
+  ${EndIf}
   CreateShortCut  "$SMPROGRAMS\FreeBSD-USB\Liesmich.lnk" "$INSTDIR\LIESMICH.TXT"
   CreateShortCut  "$SMPROGRAMS\FreeBSD-USB\Deinstallieren.lnk" "$INSTDIR\Deinstallieren.exe"
 
@@ -191,7 +201,8 @@ Section "-Einrichten"
 SectionEnd
 
 !insertmacro MUI_FUNCTION_DESCRIPTION_BEGIN
-  !insertmacro MUI_DESCRIPTION_TEXT ${SecTreiber}   "Der Treiber in allen fünf Fassungen (die gewählte wird eingerichtet), USBINST/USBSETUP, Gerätemanager mit PCI-Namen, Reiter für Maus- und Sondertasten."
+  !insertmacro MUI_DESCRIPTION_TEXT ${SecTreiber}   "Der Treiber in allen fünf Fassungen (die gewählte wird eingerichtet), USBINST/USBSETUP, Reiter für Maus- und Sondertasten."
+  !insertmacro MUI_DESCRIPTION_TEXT ${SecPciScan}   "PCISCAN.SYS (Dienst PciScan, startet automatisch) und der Gerätemanager mit PCI-Namen. Ohne ihn zeigt der Gerätemanager keine PCI-Geräte."
   !insertmacro MUI_DESCRIPTION_TEXT ${SecWerkzeuge} "USBTASTEN (Medien- und Sondertasten), USBTEST, USBGERAET, USBDRUCK. Der Treiber braucht sie nicht."
 !insertmacro MUI_FUNCTION_DESCRIPTION_END
 
@@ -505,6 +516,7 @@ Section "Uninstall"
   Delete "$INSTDIR\LIESMICH.TXT"
   Delete "$INSTDIR\PCI.IDS"
   Delete "$INSTDIR\CACERT.PEM"
+  Delete "$INSTDIR\PCISCAN.SYS"
   RMDir  "$INSTDIR"
   Delete "$SMPROGRAMS\FreeBSD-USB\*.lnk"
   RMDir  "$SMPROGRAMS\FreeBSD-USB"

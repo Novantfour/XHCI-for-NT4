@@ -1,5 +1,7 @@
 LIBRARY ntoskrnl.exe
 EXPORTS
+    ExAllocatePoolWithTag@12
+    ExFreePool@4
     IoCreateDevice@28
     IoCreateSymbolicLink@8
     IoDeleteDevice@4

@@ -140,7 +140,9 @@ typedef struct _PCI_ENTRY {
 } PCI_ENTRY;
 #pragma pack()
 
-#define MAXDEV 128
+/*  512 wie PCISCAN (2026.11.18).  Aelteres PCISCAN liefert hoechstens 128;
+ *  neueres liefert einem alten Geraetemanager so viele, wie hineinpassen.  */
+#define MAXDEV 512
 
 static PCI_ENTRY gDev[MAXDEV];
 static DWORD     gDevCount = 0;
@@ -516,6 +518,28 @@ static BOOL GetList(void)
 
     dev=CreateFileA("\\\\.\\PciScan",GENERIC_READ,
                     FILE_SHARE_READ|FILE_SHARE_WRITE,NULL,OPEN_EXISTING,0,NULL);
+#ifndef NUR_ANSEHEN
+    /*  Nur das Programm (nicht die CPL): ein EINGERICHTETER, aber
+     *  angehaltener Dienst wird gestartet.  Kein Ablegen, kein Anlegen --
+     *  nur StartService auf den Eintrag, den USBINST gemacht hat.
+     *  Bis 2026.11.17 stand PciScan auf "manuell" und lief nach dem
+     *  ersten Neustart nicht mehr; USBINST setzt ihn jetzt auf
+     *  "automatisch".  Das hier hilft Maschinen mit altem Eintrag.  */
+    if(dev==INVALID_HANDLE_VALUE){
+        SC_HANDLE scm=OpenSCManagerA(NULL,NULL,SC_MANAGER_CONNECT);
+        if(scm){
+            SC_HANDLE svc=OpenServiceA(scm,SVCNAME,SERVICE_START);
+            if(svc){
+                if(StartServiceA(svc,0,NULL)||GetLastError()==ERROR_SERVICE_ALREADY_RUNNING){
+                    dev=CreateFileA("\\\\.\\PciScan",GENERIC_READ,
+                                    FILE_SHARE_READ|FILE_SHARE_WRITE,NULL,OPEN_EXISTING,0,NULL);
+                }
+                CloseServiceHandle(svc);
+            }
+            CloseServiceHandle(scm);
+        }
+    }
+#endif
     if(dev==INVALID_HANDLE_VALUE){
         /*  Dienst nicht da/nicht gestartet -- PCI-Liste bleibt leer, USB
          *  und alles andere funktioniert weiter.  */
@@ -905,7 +929,8 @@ static void BuildTree(void)
 
     if(gPciFehlt){
         static char hinweis[] = "PCI-Geraete nicht verfuegbar: Dienst PciScan laeuft nicht "
-                                "(USBINST ein richtet ihn ein, dann Aktualisieren)";
+                                "(USBINST ein richtet ihn mit Start \"automatisch\" ein; "
+                                "oder DEVMGR.EXE als Administrator starten)";
         memset(&is,0,sizeof(is));
         is.hParent=root; is.hInsertAfter=TVI_LAST;
         is.item.mask=TVIF_TEXT|TVIF_PARAM|TVIF_IMAGE|TVIF_SELECTEDIMAGE;

@@ -811,18 +811,37 @@ zusatz_ein (void)
         SC_HANDLE psm = OpenSCManagerA(NULL, NULL, SC_MANAGER_ALL_ACCESS);
         SC_HANDLE s;
         if (psm != NULL) {
+            /*  Start AUTOMATISCH.  Bis 2026.11.17 stand hier "manuell":
+             *  der Dienst lief nur bis zum ersten Neustart, danach zeigte
+             *  der Geraetemanager keine PCI-Geraete mehr ("Dienst PciScan
+             *  laeuft nicht") -- die CPL startet ihn absichtlich nicht
+             *  selbst.  PCISCAN liest nur und gibt seinen Startcode nach
+             *  dem Durchlauf frei (INIT); automatisch kostet nichts.  */
             s = CreateServiceA(psm, "PciScan", "PciScan (Geraetemanager)",
                         SERVICE_ALL_ACCESS, SERVICE_KERNEL_DRIVER,
-                        SERVICE_DEMAND_START, SERVICE_ERROR_NORMAL,
+                        SERVICE_AUTO_START, SERVICE_ERROR_NORMAL,
                         "System32\\drivers\\pciscan.sys",
                         NULL, NULL, NULL, NULL, NULL);
             if (s == NULL && GetLastError() == 1073 /* schon da */) {
                 s = OpenServiceA(psm, "PciScan", SERVICE_ALL_ACCESS);
+                if (s != NULL) {
+                    ChangeServiceConfigA(s, SERVICE_NO_CHANGE,
+                                         SERVICE_AUTO_START, SERVICE_NO_CHANGE,
+                                         NULL, NULL, NULL, NULL, NULL, NULL,
+                                         NULL);
+                }
             }
             if (s != NULL) {
-                StartServiceA(s, 0, NULL);   /* Demand-Start; laeuft evtl. schon */
+                if (StartServiceA(s, 0, NULL) ||
+                    GetLastError() == 1056 /* laeuft schon */) {
+                    printf("  PCISCAN: PCI-Lesedienst eingerichtet (Start automatisch), laeuft\n");
+                } else {
+                    printf("  PCISCAN: eingerichtet (Start automatisch), Start jetzt: Fehler %lu"
+                           " -- laeuft nach dem Neustart\n", GetLastError());
+                }
                 CloseServiceHandle(s);
-                printf("  PCISCAN: PCI-Lesedienst fuer den Geraetemanager eingerichtet\n");
+            } else {
+                printf("  PCISCAN: Dienst nicht anlegbar, Fehler %lu\n", GetLastError());
             }
             CloseServiceHandle(psm);
         }

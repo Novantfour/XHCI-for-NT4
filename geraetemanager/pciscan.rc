@@ -2,8 +2,8 @@
    Geraetemanagers.  Fehlende Versionsangaben werten Virenscanner als
    verdaechtig; ein Treiber soll sie ohnehin haben. */
 1 VERSIONINFO
-FILEVERSION 1,0,0,0
-PRODUCTVERSION 1,0,0,0
+FILEVERSION 1,1,0,0
+PRODUCTVERSION 1,1,0,0
 FILEOS 0x40004
 FILETYPE 0x3          /* VFT_DRV */
 FILESUBTYPE 0x7       /* VFT2_DRV_SYSTEM */
@@ -14,11 +14,11 @@ BEGIN
     BEGIN
       VALUE "CompanyName", "Geraetemanager fuer Windows NT 4.0 (freie Software)"
       VALUE "FileDescription", "PCI-Lesetreiber fuer den Geraetemanager (liest den PCI-Bus ueber HalGetBusData)"
-      VALUE "FileVersion", "1.0"
+      VALUE "FileVersion", "1.1 (2026.11.18)"
       VALUE "InternalName", "PciScan"
       VALUE "OriginalFilename", "PCISCAN.SYS"
       VALUE "ProductName", "Geraetemanager fuer Windows NT 4.0"
-      VALUE "ProductVersion", "1.0"
+      VALUE "ProductVersion", "1.1"
       VALUE "LegalCopyright", "Freie Software; Quelltext liegt bei"
     END
   END

@@ -1,3 +1,53 @@
+# Fassung 2026.11.18.67 -- PCI-Scan im Installer, PCISCAN ueberarbeitet, Host-Controller
+
+**PCI-Scan fehlte nach dem ersten Neustart.**  USBINST richtete den Dienst
+PciScan mit Start "manuell" ein und startete ihn einmal.  Nach dem Neustart
+lief er nicht mehr, und der Geraetemanager startet ihn absichtlich nicht
+selbst (Virenscanner).  Ab dem ersten Neustart fehlten im Geraetemanager
+alle PCI-Geraete.  Jetzt:
+- USBINST: PciScan mit Start **automatisch**; ein vorhandener Eintrag wird
+  per ChangeServiceConfig umgestellt.  Meldet, ob der Dienst laeuft.
+- DEVMGR.EXE (nicht die CPL) startet einen eingerichteten, aber angehaltenen
+  PciScan selbst (nur StartService, kein Ablegen, kein Anlegen).
+- NSIS-Installer: eigener Bestandteil "PCI-Scan und Geraetemanager"
+  (vorgewaehlt), PCISCAN.SYS aus dem Fassungsordner.
+
+**PCISCAN.SYS 1.1** (geraetemanager/src/pciscan.c):
+- Alle 256 Busse statt Abbruch nach dem ersten leeren Bus jenseits von 8.
+  Der verlor auf Ryzen-Brettern alles hinter einer Luecke (EliteDesk 705 G5:
+  xHCI auf Bus 0a).  Gefahrlos laut SP6-Symbolen (HALAPIC):
+  HalGetBusDataByOffset -> HaliReferenceHandlerForConfigSpace, ohne Handler
+  sofort 0; Handler legt HalpInitializePciBus fuer die vom BIOS gemeldeten
+  Busse und alle Busse hinter Bruecken an.
+- 512 statt 128 Eintraege; ist der Puffer des Aufrufers kleiner, so viele
+  wie hineinpassen (alter Geraetemanager bleibt lauffaehig, statt bei mehr
+  als 128 Geraeten gar keine Liste zu bekommen).
+- Bericht: 64-Bit-Basisadressen zusammengefasst (die obere Haelfte stand
+  als eigener Bereich da), Befehlsregister (E/A, Speicher, Busmaster,
+  INTx aus), USB-Schnittstelle, Busnummern der PCI-Bruecken.
+- Abschnitte nach TREIBER-BAU-NT4.md: Durchlauf in INIT, Abfertigung in
+  PAGE mit PAGED_CODE, Puffer aus dem Auslagerungsspeicher statt 60 KB
+  resident; abschnitte.py/pruefsumme.py im Bau; Versionsangaben
+  (pciscan.rc war vorhanden, wurde nicht gebunden).
+- Geraetemanager: Platz fuer 512 Eintraege.
+
+**USB-Host-Controller:**
+- INTx-Sperre (Befehlsregister Bit 10) beim Anschliessen der Leitung
+  loesen.  Vom BIOS, von einem MSI-Betrieb oder unserem eigenen
+  Abfragebetrieb beim vorigen Start stehen geblieben, kam nie eine
+  Unterbrechung -- USB lief still nur im 50-ms-Sicherungstakt.
+- Mehr als 16 Controller: der Ueberzaehlige wird gemeldet statt still
+  uebergangen.  Am Ende der PCI-Suche: Anzahl und hoechster belegter Bus.
+
+Pruefstand (pruefstand/geraete-luecke.sh): zusaetzlich ein xHCI hinter
+einer Busluecke (pxb, Bus 0d).  Der USB-Treiber findet ihn, die Tastatur
+daran laeuft (der alte Treiber im Ausgangsabbild findet sie nicht).
+NSIS-Installer still (/S) eingerichtet: PciScan Start 2; nach dem Neustart
+zeigt der Geraetemanager als CPL (startet den Dienst nicht selbst) alle
+PCI-Geraete, darunter den xHCI auf Bus 0d und die PCI-PCI-Bruecke.
+pruefstand/dbgsym.py + dis.py: COFF-Symbole aus SP6-.dbg lesen und eine
+Funktion zerlegen (fuer die HAL-Befunde oben).
+
 # NSIS-Installer (2026.11.17.66)
 
 installer-nsis/: usbnt.nsi, bau-nsis.sh, LIESMICH.md.  Ergebnis

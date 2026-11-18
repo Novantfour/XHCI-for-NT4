@@ -76,6 +76,8 @@ ntu_cfg_read (ULONG bus, ULONG slot, ULONG off, ULONG len)
     return v;
 }
 
+static ULONG ntu_letzter_bus;
+
 static VOID
 ntu_scan_pci (VOID)
 {
@@ -110,7 +112,18 @@ ntu_scan_pci (VOID)
 
                 if (((cls >> 24) & 0xFF) == PCIC_SERIALBUS &&
                     ((cls >> 16) & 0xFF) == PCIS_SERIALBUS_USB &&
-                    ntu_hc_count < NTU_MAX_HC) {
+                    ntu_hc_count >= NTU_MAX_HC) {
+
+                    /*  Mehr als NTU_MAX_HC: bisher still uebergangen.  Die
+                     *  Grenze haengt an der IOCTL-Struktur fuer USBTEST und
+                     *  den Geraetemanager (NTU_MAX_HC_IOCTL); hier wenigstens
+                     *  sagen, welcher fehlt.  */
+                    ntu_printf("usb: %02x:%02x.%x  %04x:%04x  uebergangen -- "
+                               "mehr als %u Controller\n", bus, dev, fn,
+                               id & 0xFFFF, id >> 16, NTU_MAX_HC);
+
+                } else if (((cls >> 24) & 0xFF) == PCIC_SERIALBUS &&
+                    ((cls >> 16) & 0xFF) == PCIS_SERIALBUS_USB) {
 
                     ntu_pci_ivars *iv = &ntu_hc[ntu_hc_count];
                     ULONG          sub;
@@ -148,6 +161,10 @@ ntu_scan_pci (VOID)
             }
         }
 
+        if (onbus != 0) {
+            ntu_letzter_bus = bus;
+        }
+
         /*  Frueher: hinter Bus 8 ohne Fund Schluss ("ein Brett mit
          *  Bussen jenseits 8 und einer Luecke davor gibt es nicht").
          *  Gibt es doch: Ryzen-APUs haengen ihre eigenen xHCI hinter
@@ -155,8 +172,10 @@ ntu_scan_pci (VOID)
          *  davor.  HP EliteDesk 705 G5: nur Chipsatz-xHCI und Realtek-
          *  EHCI gefunden, die Front-Buchsen fehlten.  Alle 256 Busse
          *  kosten 8192 Konfigurationszugriffe -- vernachlaessigbar.  */
-        (void)onbus;
     }
+
+    ntu_printf("usb: PCI-Suche: %u Controller, hoechster belegter Bus %02x\n",
+               ntu_hc_count, ntu_letzter_bus);
 }
 
 

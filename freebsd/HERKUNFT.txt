@@ -5,3 +5,12 @@ Ausschnitt: sys/dev/usb/*.{c,h} ohne usb_fdt_support.c, usb_hub_acpi.c;
   quirk/; dev/hid/hid.c und Kopfdateien.
 usbdevs.h erzeugt: awk -f sys/tools/usbdevs2h.awk sys/dev/usb/usbdevs -h
 Bauen: SRC=<dieses Verzeichnis>, siehe bau-clangcl.sh
+
+Eigene Aenderungen (Stand 2026.11.18.67) -- sonst bitgenau wie oben:
+  dev/usb/controller/ehci_pci.c  BIOS-Uebergabe kuerzer, SMI-Quellen immer
+                                 abschalten (wie Linux pci-quirks.c)
+  dev/usb/controller/xhci_pci.c  BIOS-Uebergabe kuerzer, SMI abschalten
+                                 (xhci_pci_smi_aus, wie Linux pci-quirks.c)
+  Der vollstaendige Unterschied steht in NT4-AENDERUNGEN.diff.
+  PRUEFSUMMEN.md5 beschreibt den unveraenderten FreeBSD-Stand; fuer diese
+  beiden Dateien schlaegt "md5sum -c" deshalb absichtlich fehl.

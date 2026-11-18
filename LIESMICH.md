@@ -221,6 +221,7 @@ Die vollständige Liste offener Punkte steht in `PRUEFLISTE.md`.
 | `GERAETE.md` | die rohe Geräteschnittstelle `UsbDevN` im Einzelnen |
 | `DRUCKER-ANSCHLUSS.md` | die Druckerschnittstelle im Einzelnen |
 | `AENDERUNGEN.md` | was sich wann und warum geändert hat |
+| `REFERENZEN.md` | übernommener Code, Vorlagen, Spezifikationen, Unterlagen, Werkzeuge – mit Herkunft und Lizenz |
 | `PRUEFLISTE.md` | was geprüft ist und was noch offen ist |
 | `pruefstand/` | die Werkzeuge, mit denen unter QEMU geprüft wurde |
 | `bau-clangcl.sh`, `einfuhrlib.py`, `pruefsumme.py`, `ddk-ersatz/` | zum Bauen |

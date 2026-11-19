@@ -329,19 +329,70 @@ bus_alloc_resource_any (device_t dev, int type, int *rid, unsigned int flags)
                    "  xecp %05x  -> %u kB\n",
                    caplen, plaetze, unterbr, anschl, xecp, noetig / 1024);
 
-        if (noetig > r->r_len) {
+        /*  Die erweiterten Faehigkeiten bilden eine Kette, und nur die
+         *  erste steht in HCCPARAMS1.  Intel (z.B. 300er-Serie, M720q)
+         *  haengt hinter 0x8000 weitere an, bis ueber 0x9000 hinaus;
+         *  xhci_get_xecp() und die BIOS-Uebergabe laufen die ganze
+         *  Kette ab.  War nur bis zur ersten abgebildet, griffen sie
+         *  ins Leere: STOP 0x50 an <Basis>+0x9000.  Deshalb die Kette
+         *  hier mit wachsender Abbildung ablaufen, bis alles drin ist.  */
 
-            MmUnmapIoSpace((PVOID)r->r_handle, r->r_len);
-            r->r_len    = noetig;
-            r->r_handle = (bus_space_handle_t)MmMapIoSpace(phys, r->r_len,
-                                                           MmNonCached);
+        {
+            int runde;
 
-            if (r->r_handle == 0) {
-                ntu_printf("xhci: %u kB liessen sich nicht abbilden\n",
-                           noetig / 1024);
-                ntu_free(r);
-                return 0;
+            for (runde = 0; runde < 8; runde++) {
+
+                ULONG off = xecp, weiter = noetig, eec, n = 0;
+
+                if (noetig > r->r_len) {
+
+                    MmUnmapIoSpace((PVOID)r->r_handle, r->r_len);
+                    r->r_len    = noetig;
+                    r->r_handle = (bus_space_handle_t)MmMapIoSpace(phys, r->r_len,
+                                                                   MmNonCached);
+
+                    if (r->r_handle == 0) {
+                        ntu_printf("xhci: %u kB liessen sich nicht abbilden\n",
+                                   noetig / 1024);
+                        ntu_free(r);
+                        return 0;
+                    }
+                }
+
+                while (off != 0 && n++ < 64) {
+
+                    if (off + 0x40 > weiter) {
+                        weiter = off + 0x40;
+                    }
+
+                    if (off + 4 > r->r_len) {
+                        break;                  /* erst abbilden, dann lesen */
+                    }
+
+                    eec = ntu_r4(NTU_SPACE_MEM, r->r_handle, off);
+
+                    if (eec == 0xFFFFFFFFu || ((eec >> 8) & 0xFF) == 0) {
+                        break;
+                    }
+
+                    off += ((eec >> 8) & 0xFF) * 4;
+                }
+
+                weiter = (weiter + PAGE_MASK) & ~((ULONG)PAGE_MASK);
+
+                if (weiter > 0x40000) {
+                    weiter = 0x40000;
+                }
+
+                if (weiter <= r->r_len) {
+                    break;
+                }
+
+                noetig = weiter;
             }
+
+            ntu_printf("xhci: Kette der Faehigkeiten bis %05x, abgebildet %u kB\n",
+                       noetig, r->r_len / 1024);
         }
     }
 

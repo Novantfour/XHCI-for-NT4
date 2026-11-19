@@ -1,3 +1,20 @@
+# Fassung 2026.11.19.68 -- xHCI: ganze Kette der erweiterten Faehigkeiten abbilden
+
+**STOP 0x50 (PAGE_FAULT_IN_NONPAGED_AREA) im Textmodus-Setup auf dem Lenovo
+M720q** (i3-8100T, Intel 300er-Serie): Fehleradresse `<Abbildung>+0x9000`,
+Stapel nur usbnt.sys.  Abgebildet wurde der Registerblock bis zur *ersten*
+erweiterten Faehigkeit + 0x100 (dort 0x8000 -> 36 kB).  Intel haengt dahinter
+weitere Faehigkeiten an, ueber 0x9000 hinaus; `xhci_get_xecp()` und die
+BIOS-Uebergabe laufen die ganze Kette ab und griffen ins Leere.
+
+Jetzt (quelle/nt/ntgeraet.c, bus_alloc_resource): die Kette wird mit
+wachsender Abbildung abgelaufen (je Faehigkeit +0x40, hoechstens 64 Glieder,
+hoechstens 256 kB), bis alles abgebildet ist.  Meldung:
+`xhci: Kette der Faehigkeiten bis xxxxx, abgebildet n kB`.
+
+Geprueft: QEMU q35, Setup nur vom USB-DVD an qemu-xhci, USB-Tastatur --
+Textmodus-Setup laeuft wie vorher.  Auf dem M720q noch nicht.
+
 # Fassung 2026.11.18.67 -- PCI-Scan im Installer, PCISCAN ueberarbeitet, Host-Controller
 
 **PCI-Scan fehlte nach dem ersten Neustart.**  USBINST richtete den Dienst

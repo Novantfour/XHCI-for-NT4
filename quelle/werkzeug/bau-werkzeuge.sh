@@ -103,7 +103,7 @@ konsole usbdruck   "-lkernel32" "$(ver usbdruck exe 'USB-Treiber: Drucker-Pruefu
 konsole ipptest    "-lkernel32" "$(ver ipptest exe 'USB-Treiber: Drucker-Schnittstelle pruefen' IPPTEST.EXE)"
 konsole eingabetest "-lkernel32 -luser32" "$(ver eingabetest exe 'USB-Treiber: Eingabe-Pruefung' EINGABETEST.EXE)"
 fenster usbsetup   "-lkernel32 -luser32 -lgdi32 -ladvapi32 -lversion" "$(ver usbsetup exe 'Einrichtung des USB-Treibers' USBSETUP.EXE)"
-fenster usbtasten  "auswurf.c -lkernel32 -luser32 -lwinmm -lshell32" "$(ver usbtasten exe 'USB-Treiber: Lautstaerke- und Programmtasten' USBTASTEN.EXE)"
+fenster usbtasten  "auswurf.c -lkernel32 -luser32 -lwinmm -lshell32" "$(ver usbtasten exe 'USB-Treiber: Laufwerk sicher entfernen, Sondertasten' USBTASTEN.EXE)"
 fenster mauslatenz "-lkernel32 -luser32 -lgdi32" "$(ver mauslatenz exe 'USB-Treiber: Maus-Messung' MAUSLATENZ.EXE)"
 fenster klicktest  "-lkernel32 -luser32 -lgdi32" "$(ver klicktest exe 'USB-Treiber: Klick-Pruefung' KLICKTEST.EXE)"
 fenster mausdaten  "-lkernel32 -luser32 -lgdi32" "$(ver mausdaten exe 'USB-Treiber: Maus-Protokoll' MAUSDATEN.EXE)"

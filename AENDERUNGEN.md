@@ -1,3 +1,16 @@
+# Fassung 2026.11.19.72 -- neues Symbol fuer USBTASTEN im Infobereich
+
+**Wunsch:** Das Tray-Symbol passte nicht mehr zur Funktion (Lautsprecher aus
+der Zeit, als USBTASTEN nur Lautstaerketasten bediente).
+
+Jetzt: USB-Stick (Stecker, Gehaeuse mit USB-Dreizack) mit gruenem
+Haken-Abzeichen -- "Laufwerk sicher entfernen".  16 und 32 Pixel, je 16 und
+256 Farben, mit AND-Maske (NT4-tauglich).  Erzeugt von
+`quelle/werkzeug/res/mk-usbtasten-ico.py` (kein Bild aus fremder Quelle).
+Versionsbeschreibung der EXE: "USB-Treiber: Laufwerk sicher entfernen,
+Sondertasten".  Treiber unveraendert (bin/2026.11.19.71); bau-nsis.sh nimmt
+dafuer TREIBERFASSUNG.
+
 # Fassung 2026.11.19.71 -- USB-Laufwerk sicher entfernen, mit Bestaetigung
 
 **Wunsch:** Beim Auswerfen soll eine Bestaetigung kommen "kann herausgezogen

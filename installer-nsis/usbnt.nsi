@@ -16,7 +16,7 @@ SetCompressor /SOLID lzma
 RequestExecutionLevel admin
 
 !ifndef FASSUNG
-  !define FASSUNG "2026.11.18.67"
+  !define FASSUNG "2026.11.19.71"
 !endif
 !ifndef TREIBER                      ; Ordner mit usbnt/uhcint/ohcint/ehcint/xhcint.sys
   !define TREIBER "..\bin\${FASSUNG}"

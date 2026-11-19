@@ -80,6 +80,14 @@
 #define NTUM_CD_CHECK_VERIFY       NTUM_CD(0x0200, FILE_READ_ACCESS)
 #define NTUM_CD_MEDIA_REMOVAL      NTUM_CD(0x0201, FILE_READ_ACCESS)
 #define NTUM_CD_EJECT_MEDIA        NTUM_CD(0x0202, FILE_READ_ACCESS)
+
+/*  IOCTL_STORAGE_EJECT_MEDIA (ntddstor.h): CTL_CODE(0x2D, 0x0202,
+ *  METHOD_BUFFERED, FILE_READ_ACCESS).  Schicken neuere Programme statt
+ *  IOCTL_DISK_EJECT_MEDIA bzw. IOCTL_CDROM_EJECT_MEDIA.  */
+#define NTUM_STORAGE_EJECT_MEDIA   0x002D4808
+
+/*  Meldung an USBTASTEN.EXE (ober/ntsondertasten.c, Auftragsschlange).  */
+extern int ntu_helfer_melden (const char *text);
 #define NTUM_CD_LOAD_MEDIA         NTUM_CD(0x0203, FILE_READ_ACCESS)
 #define NTUM_CD_RESERVE            NTUM_CD(0x0204, FILE_READ_ACCESS)
 #define NTUM_CD_RELEASE            NTUM_CD(0x0205, FILE_READ_ACCESS)
@@ -102,6 +110,7 @@ enum { NTUM_AUS, NTUM_EIN, NTUM_N };
  * ==================================================================== */
 
 #define NTUM_MAX_LUN  8
+#define NTUM_MELDUNG  160          /* = NTU_SONDER_TEXT */
 
 struct ntum_softc;
 
@@ -120,6 +129,8 @@ typedef struct ntum_einheit {
     char                  name[40];       /* Hersteller + Produkt */
     const char           *fremd;          /* Dateisystem, das NT 4.0 nicht kennt */
     int                   cd;             /* Geraetetyp 5: CD/DVD */
+    int                   ausgeworfen;    /* sicher entfernt: kein Befehl mehr
+                                             bis zum Abziehen (nur Platten) */
     PDEVICE_OBJECT        nt;
 } ntum_einheit;
 
@@ -1345,6 +1356,96 @@ ntum_irp (PDEVICE_OBJECT dev, PIRP irp)
  *  CDROM_TOC_SESSION_DATA; sie wird unveraendert weitergereicht.
  *  EJECT/LOAD: START STOP UNIT mit LoEj.  */
 
+/* ====================================================================
+ *  Sicher entfernen
+ *
+ *  NT 4.0 kennt kein "Hardware sicher entfernen".  Das Werkzeug
+ *  (USBTASTEN-Menue, "usbgeraet auswerfen X:") schreibt aus, sperrt das
+ *  Laufwerk und meldet das Dateisystem ab; dann schickt es
+ *  IOCTL_DISK_EJECT_MEDIA.  Hier, im Arbeitsfaden:
+ *
+ *    1. alles, was vorher in der Warteschlange stand, ist fertig
+ *       (der Faden arbeitet der Reihe nach);
+ *    2. SYNCHRONIZE CACHE -- der Stick schreibt seinen eigenen Puffer
+ *       aus (wer es nicht kann, meldet einen Fehler; das ist harmlos);
+ *    3. START STOP UNIT (anhalten, auswerfen) -- viele Sticks lehnen ab,
+ *       auch das ist harmlos;
+ *    4. "ausgeworfen": ab jetzt geht kein Befehl mehr an das Geraet, auch
+ *       nicht die Medienabfrage; Lesen und Schreiben enden mit "kein
+ *       Medium", bis es abgezogen und neu angesteckt wird;
+ *    5. Meldung an USBTASTEN: erst jetzt "kann herausgezogen werden".
+ *
+ *  Das Dateisystem: FastFat (NT 4.0 SP6, FatDismountVolume) setzt beim
+ *  Abmelden nur seinen Datentraeger auf "schlecht"; VPB_MOUNTED loescht
+ *  erst FatCheckForDismount, wenn das letzte Handle zu ist.  Waehrend der
+ *  Auswurf ueber dasselbe Handle kommt, steht es also noch.  Deshalb:
+ *  erst auswerfen und die Anfrage beantworten, dann bis 5 s warten, bis
+ *  VPB_MOUNTED weg ist -- erst dann "kann herausgezogen werden".  Bleibt
+ *  es stehen (ein Programm hat das Laufwerk offen, oder jemand hat ohne
+ *  Abmelden ausgeworfen), kommt eine Warnung.
+ * ==================================================================== */
+
+static void
+ntum_auswurf_melden (ntum_einheit *E, int warnung)
+{
+    char              t[NTUM_MELDUNG];
+    ntum_erweiterung *x = E->nt ? (ntum_erweiterung *)E->nt->DeviceExtension : 0;
+    char              b = (x && x->Buchstabe) ? (char)x->Buchstabe : '?';
+
+    /*  ausgeworfen:<Buchstabe>|<Name>|<0 = sicher, 1 = noch eingebunden>|<CD>  */
+    snprintf(t, sizeof(t), "ausgeworfen:%c|%s|%d|%d", b, E->name, warnung, E->cd);
+    ntu_helfer_melden(t);
+}
+
+static void
+ntum_sicher_entfernen (ntum_einheit *E, PIRP irp)
+{
+    uint8_t       cdb[10];
+    uint32_t      ist = 0;
+    int           r1, r2, k;
+    PVPB          vpb = E->nt ? E->nt->Vpb : 0;
+    LARGE_INTEGER t;
+
+    memset(cdb, 0, sizeof(cdb));
+    cdb[0] = 0x35;                                  /* SYNCHRONIZE CACHE(10) */
+    r1 = ntum_scsi(E, cdb, 10, 0, NULL, 0, &ist);
+
+    memset(cdb, 0, sizeof(cdb));
+    cdb[0] = 0x1B;                                  /* START STOP UNIT */
+    cdb[4] = 0x02;                                  /* LoEj, Start = 0 */
+    r2 = ntum_scsi(E, cdb, 6, 0, NULL, 0, &ist);
+
+    if (r1 == 2 || E->sc->sc_weg) {
+        /*  Transportfehler: schon abgezogen oder haengt.  */
+        ntum_fertig(irp, STATUS_IO_DEVICE_ERROR, 0);
+        return;
+    }
+
+    E->ausgeworfen = 1;
+    E->medium      = 0;
+    ntum_verify(E);
+    ntu_printf("umass: %s: angehalten (Cache %s, Anhalten %s)\n", E->name,
+               r1 == 0 ? "ausgeschrieben" : "ohne Befehl",
+               r2 == 0 ? "ok" : "abgelehnt");
+    ntum_fertig(irp, STATUS_SUCCESS, 0);
+
+    /*  Auf das Aushaengen des Dateisystems warten (s. oben).  Die
+     *  Warteschlange dieser Einheit steht so lange -- es kommt ohnehin
+     *  nichts mehr durch.  */
+    t.QuadPart = -2500000;                          /* 250 ms */
+    for (k = 0; k < 20 && vpb != 0 && (vpb->Flags & VPB_MOUNTED) &&
+                !E->sc->sc_weg; k += 1) {
+        KeDelayExecutionThread(KernelMode, FALSE, &t);
+    }
+    if (vpb != 0 && (vpb->Flags & VPB_MOUNTED)) {
+        ntu_printf("umass: %s: Dateisystem nach 5 s noch eingebunden\n", E->name);
+        ntum_auswurf_melden(E, 1);
+    } else {
+        ntu_printf("umass: %s: sicher entfernt\n", E->name);
+        ntum_auswurf_melden(E, 0);
+    }
+}
+
 static void
 ntum_cd_befehl (ntum_einheit *E, PIRP irp)
 {
@@ -1358,6 +1459,15 @@ ntum_cd_befehl (ntum_einheit *E, PIRP irp)
 
     memset(cdb, 0, sizeof(cdb));
 
+    if (code == IOCTL_DISK_EJECT_MEDIA || code == NTUM_STORAGE_EJECT_MEDIA) {
+        if (E->cd) {
+            code = NTUM_CD_EJECT_MEDIA;     /* CD: Schublade, wie unten */
+        } else {
+            ntum_sicher_entfernen(E, irp);
+            return;
+        }
+    }
+
     if (code == NTUM_CD_EJECT_MEDIA || code == NTUM_CD_LOAD_MEDIA) {
         cdb[0] = 0x1B;                              /* START STOP UNIT */
         cdb[4] = (code == NTUM_CD_EJECT_MEDIA) ? 0x02 : 0x03;
@@ -1365,6 +1475,7 @@ ntum_cd_befehl (ntum_einheit *E, PIRP irp)
         if (code == NTUM_CD_EJECT_MEDIA && r == 0) {
             E->medium = 0;
             ntum_verify(E);
+            ntum_auswurf_melden(E, 0);
         }
         ntum_fertig(irp, r == 0 ? STATUS_SUCCESS : STATUS_IO_DEVICE_ERROR, 0);
         return;
@@ -1538,6 +1649,17 @@ ntum_ioctl (PDEVICE_OBJECT dev, PIRP irp)
             }
             return ntum_irp(dev, irp);
 
+        /*  Sicher entfernen.  Durch die Warteschlange, nicht hier: der
+         *  Arbeitsfaden arbeitet die Auftraege der Reihe nach ab, also ist
+         *  jedes vorher gestellte Lesen und Schreiben fertig, wenn der
+         *  Auswurf drankommt (ntum_cd_befehl).  */
+        case IOCTL_DISK_EJECT_MEDIA:
+        case NTUM_STORAGE_EJECT_MEDIA:
+            if (!medium) {
+                return ntum_fertig(irp, STATUS_NO_MEDIA_IN_DEVICE, 0);
+            }
+            return ntum_irp(dev, irp);
+
         case NTUM_CD_GET_DRIVE_GEOMETRY: {
 
             DISK_GEOMETRY *g = (DISK_GEOMETRY *)p;
@@ -1634,7 +1756,6 @@ ntum_ioctl (PDEVICE_OBJECT dev, PIRP irp)
         case IOCTL_DISK_VERIFY:
         case IOCTL_DISK_SET_PARTITION_INFO:
         case IOCTL_DISK_MEDIA_REMOVAL:
-        case IOCTL_DISK_EJECT_MEDIA:
             return ntum_fertig(irp, medium ? STATUS_SUCCESS
                                            : STATUS_NO_MEDIA_IN_DEVICE, 0);
 
@@ -1679,6 +1800,10 @@ ntum_pruefen (ntum_einheit *E)
     uint8_t            cdb[6];
     uint32_t           ist;
     int                r;
+
+    if (E->ausgeworfen) {
+        return;             /* sicher entfernt: kein Befehl mehr ans Geraet */
+    }
 
     memset(cdb, 0, sizeof(cdb));
     r = ntum_scsi(E, cdb, 6, 0, NULL, 0, &ist);

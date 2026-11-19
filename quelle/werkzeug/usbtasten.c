@@ -27,6 +27,7 @@
 #include <shellapi.h>
 #include <winioctl.h>
 #include "../ober/ntusbioctl.h"
+#include "auswurf.h"
 
 /*  Der Uebersetzer erzeugt memset-Aufrufe auch ohne Quelltext dafuer.  */
 void *memset (void *z, int c, unsigned int n) { unsigned char *p = z; while (n--) *p++ = (unsigned char)c; return z; }
@@ -34,6 +35,8 @@ void *memset (void *z, int c, unsigned int n) { unsigned char *p = z; while (n--
 #define WM_SYMBOL      (WM_APP + 1)
 #define ID_BEENDEN     100
 #define ID_INFO        101
+#define ID_AUSWURF     200            /* + 0..25: Laufwerk A..Z */
+#define ID_KEIN_USB    230
 /*  NT 4.0 kennt NOTIFYICONDATA nur in der ersten Fassung (88 Byte);
     mit groesserem cbSize zeigt die Shell von NT 4.0 kein Symbol.  */
 #define NID_V1_GROESSE 88
@@ -155,10 +158,109 @@ programm (const char *befehl)
     ShellExecuteA(gFenster, "open", befehl, NULL, NULL, SW_SHOWNORMAL);
 }
 
+/* ---------------- Sicher entfernen ---------------- */
+
+/*  Eigener Faden je Meldefenster: weder das Abholen weiterer Auftraege
+ *  (Lautstaerketasten) noch das Menue sollen warten, bis jemand OK
+ *  drueckt.  */
+static DWORD WINAPI
+meldung_faden (LPVOID p)
+{
+    char *t = (char *)p;
+    UINT  art = (t[0] == '!') ? MB_ICONEXCLAMATION : MB_ICONINFORMATION;
+
+    MessageBoxA(NULL, t + 1, "USB-Ger\xe4t sicher entfernen",
+                MB_OK | art | MB_SETFOREGROUND | MB_TOPMOST);
+    HeapFree(GetProcessHeap(), 0, t);
+    return 0;
+}
+
+/*  art: 'i' Hinweis, '!' Warnung.  */
+static void
+meldung_zeigen (char art, const char *text)
+{
+    int   n = lstrlenA(text);
+    char *t = (char *)HeapAlloc(GetProcessHeap(), 0, (SIZE_T)n + 2);
+    DWORD tid;
+
+    if (t == NULL) {
+        return;
+    }
+    t[0] = art;
+    lstrcpyA(t + 1, text);
+    CloseHandle(CreateThread(NULL, 0, meldung_faden, t, 0, &tid));
+}
+
+/*  Vom Treiber: "ausgeworfen:<Bu>|<Name>|<0 sicher, 1 eingebunden>|<CD>".
+ *  Der Treiber schickt das erst, wenn alle Lese- und Schreibauftraege
+ *  fertig sind, der Stick seinen Puffer ausgeschrieben hat und kein
+ *  Befehl mehr an ihn geht.  */
+static void
+ausgeworfen (const char *p)
+{
+    char        bu = p[0], name[64], t[400];
+    const char *q;
+    int         i, warn = 0, cd = 0;
+
+    q = p;
+    while (*q && *q != '|') q++;
+    if (*q == '|') q++;
+    for (i = 0; *q && *q != '|' && i < (int)sizeof(name) - 1; q++) {
+        /*  SCSI-Hersteller und -Produkt sind mit Leerzeichen aufgefuellt
+         *  ("QEMU    QEMU HARDDISK"): mehrere zu einem.  */
+        if (*q == ' ' && (i == 0 || name[i - 1] == ' ')) {
+            continue;
+        }
+        name[i++] = *q;
+    }
+    name[i] = '\0';
+    while (i > 0 && name[i - 1] == ' ') {
+        name[--i] = '\0';                  /* SCSI-Namen sind aufgefuellt */
+    }
+    if (*q == '|') { q++; warn = (*q == '1'); while (*q && *q != '|') q++; }
+    if (*q == '|') { q++; cd = (*q == '1'); }
+
+    if (warn) {
+        wsprintfA(t, "Das Laufwerk %c: (%s) ist angehalten, aber das Dateisystem "
+                     "war nicht abgemeldet: ein Programm hatte es noch offen, oder es "
+                     "wurde ohne Abmelden ausgeworfen.\r\n\r\n"
+                     "Was das Programm noch nicht gespeichert hatte, kann fehlen. "
+                     "Zum sicheren Entfernen das USB-Symbol im Infobereich anklicken "
+                     "und \"USB-Laufwerk sicher entfernen\" w\xe4hlen.", bu, name);
+        meldung_zeigen('!', t);
+    } else if (cd) {
+        wsprintfA(t, "Die Scheibe in %c: (%s) kann jetzt entnommen werden.", bu, name);
+        meldung_zeigen('i', t);
+    } else {
+        wsprintfA(t, "Das USB-Ger\xe4t %c: (%s) kann jetzt herausgezogen werden.\r\n\r\n"
+                     "Alle Daten sind geschrieben, das Dateisystem ist abgemeldet, "
+                     "und es laufen keine Lese- oder Schreibvorg\xe4nge mehr.\r\n"
+                     "Bis zum erneuten Anstecken greift NT nicht mehr darauf zu.",
+                  bu, name);
+        meldung_zeigen('i', t);
+    }
+}
+
+/*  Faden: ein Laufwerk sicher entfernen.  Bei Erfolg kommt die
+ *  Bestaetigung vom Treiber (ausgeworfen); hier nur Fehler zeigen.  */
+static DWORD WINAPI
+auswerfen_faden (LPVOID p)
+{
+    char lw = (char)(UINT_PTR)p;
+    char m[400];
+
+    if (usb_auswerfen(lw, m, sizeof(m), 0) != AUSWURF_OK) {
+        meldung_zeigen('!', m);
+    }
+    return 0;
+}
+
 static void
 ausfuehren (const char *t)
 {
-    if (lstrcmpiA(t, "lauter") == 0)            lautstaerke(1);
+    if (CompareStringA(LOCALE_SYSTEM_DEFAULT, NORM_IGNORECASE, t, 12, "ausgeworfen:", 12) == 2)
+                                                ausgeworfen(t + 12);
+    else if (lstrcmpiA(t, "lauter") == 0)       lautstaerke(1);
     else if (lstrcmpiA(t, "leiser") == 0)       lautstaerke(-1);
     else if (lstrcmpiA(t, "stumm") == 0)        stumm();
     else if (CompareStringA(LOCALE_SYSTEM_DEFAULT, NORM_IGNORECASE, t, 9, "programm:", 9) == 2)
@@ -225,7 +327,7 @@ symbol (DWORD was)
     n.uFlags           = NIF_ICON | NIF_TIP | NIF_MESSAGE;
     n.uCallbackMessage = WM_SYMBOL;
     n.hIcon            = (HICON)LoadImageA(gInst, MAKEINTRESOURCEA(1), IMAGE_ICON, 16, 16, 0);
-    lstrcpynA(n.szTip, "USB-Sondertasten (Lautstaerke, Programme)", 64);
+    lstrcpynA(n.szTip, "USB: Sondertasten, Laufwerk sicher entfernen", 64);
     Shell_NotifyIconA(was, &n);
 }
 
@@ -235,6 +337,24 @@ menue (void)
     HMENU m = CreatePopupMenu();
     POINT p;
 
+    {
+        HMENU u = CreatePopupMenu();
+        char  lw, z[64], e[96];
+        int   n = 0;
+
+        for (lw = 'C'; lw <= 'Z'; lw += 1) {
+            if (usb_laufwerk(lw, z, sizeof(z))) {
+                wsprintfA(e, "Laufwerk &%c:", lw);
+                AppendMenuA(u, MF_STRING, ID_AUSWURF + (lw - 'A'), e);
+                n += 1;
+            }
+        }
+        if (n == 0) {
+            AppendMenuA(u, MF_STRING | MF_GRAYED, ID_KEIN_USB, "(kein USB-Laufwerk)");
+        }
+        AppendMenuA(m, MF_POPUP, (UINT_PTR)u, "USB-Laufwerk &sicher entfernen");
+        AppendMenuA(m, MF_SEPARATOR, 0, NULL);
+    }
     AppendMenuA(m, MF_STRING, ID_INFO,    "&Was macht das?");
     AppendMenuA(m, MF_SEPARATOR, 0, NULL);
     AppendMenuA(m, MF_STRING, ID_BEENDEN, "&Beenden");
@@ -259,11 +379,19 @@ fensterfunktion (HWND h, UINT msg, WPARAM wp, LPARAM lp)
         }
         return 0;
     case WM_COMMAND:
-        if (LOWORD(wp) == ID_BEENDEN) {
+        if (LOWORD(wp) >= ID_AUSWURF && LOWORD(wp) < ID_AUSWURF + 26) {
+            DWORD tid;
+            CloseHandle(CreateThread(NULL, 0, auswerfen_faden,
+                                     (LPVOID)(UINT_PTR)('A' + LOWORD(wp) - ID_AUSWURF),
+                                     0, &tid));
+        } else if (LOWORD(wp) == ID_BEENDEN) {
             DestroyWindow(h);
         } else if (LOWORD(wp) == ID_INFO) {
             MessageBoxA(h,
-                "USBTASTEN fuehrt Sondertasten-Belegungen aus, die der USB-Treiber\r\n"
+                "USB-Laufwerk sicher entfernen: schreibt alles aus, meldet das\r\n"
+                "Dateisystem ab, wartet, bis keine Lese- und Schreibauftraege mehr\r\n"
+                "laufen, und sagt dann, dass der Stick gezogen werden kann.\r\n\r\n"
+                "USBTASTEN fuehrt ausserdem Sondertasten-Belegungen aus, die der USB-Treiber\r\n"
                 "nicht selbst erledigen kann:  lauter, leiser, stumm, programm:<Befehl>.\r\n\r\n"
                 "Belegen: Systemsteuerung -> Tastatur -> Reiter \"Sondertasten\".\r\n"
                 "Tastenkombinationen brauchen dieses Programm nicht.\r\n\r\n"

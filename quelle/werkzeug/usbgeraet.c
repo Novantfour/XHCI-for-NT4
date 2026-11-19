@@ -37,6 +37,7 @@
 
 #include <windows.h>
 #include "ntbasis.h"
+#include "auswurf.h"
 #include "../ober/ntusbgen.h"
 
 static char puffer[sizeof(NTUG_ERGEBNIS) + NTUG_MAX_DATEN];
@@ -732,101 +733,35 @@ lesetest (HANDLE h, unsigned long mb)
 
 
 /* ==================================================================== *
- *  Auswerfen
- *
- *  NT 4.0 kennt kein "Hardware sicher entfernen".  Das Dateisystem haelt
- *  Geschriebenes im Cache; wer den Stick zu frueh zieht, verliert Daten
- *  oder beschaedigt die FAT.  Die drei Schritte hier machen ihn sicher:
- *
- *    FlushFileBuffers        alles Gepufferte auf den Stick
- *    FSCTL_LOCK_VOLUME       niemand hat mehr etwas offen
- *    FSCTL_DISMOUNT_VOLUME   das Dateisystem gibt den Datentraeger frei
- *
- *  Scheitert das Sperren, ist noch eine Datei offen -- dann ist trotzdem
- *  ausgeschrieben, aber der Stick sollte noch nicht gezogen werden.
+ *  Auswerfen -- der Ablauf steht in auswurf.c (gemeinsam mit USBTASTEN).
+ *  Der Treiber bestaetigt erst, wenn alle Lese- und Schreibauftraege
+ *  fertig sind; USBTASTEN zeigt dann zusaetzlich ein Fenster.
  * ==================================================================== */
 
-#define FSCTL_LOCK_VOLUME_NT     0x00090018
-#define FSCTL_DISMOUNT_VOLUME_NT 0x00090020
+static void
+auswurf_zeile (const char *t)
+{
+    printf("  %s\n", t);
+}
 
 static int
 auswerfen (const char *lw)
 {
-    char   pfad[8];
-    HANDLE h;
-    DWORD  n;
+    char m[400];
+    int  r;
 
     if (lw[0] == '\0' || lw[1] != ':') {
         printf("  usbgeraet auswerfen X:\n");
         return 1;
     }
-
-    pfad[0] = '\\'; pfad[1] = '\\'; pfad[2] = '.'; pfad[3] = '\\';
-    pfad[4] = lw[0]; pfad[5] = ':'; pfad[6] = '\0';
-
-    h = CreateFileA(pfad, GENERIC_READ | GENERIC_WRITE,
-                    FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING,
-                    0, NULL);
-
-    if (h == INVALID_HANDLE_VALUE) {
-        printf("\n  %c: laesst sich nicht oeffnen (Fehler %lu).\n\n", lw[0],
-               GetLastError());
+    printf("\n");
+    r = usb_auswerfen(lw[0], m, sizeof(m), auswurf_zeile);
+    if (r != AUSWURF_OK) {
+        printf("\n  %s\n\n", m);
         return 1;
     }
-
-    printf("\n  %c: ausschreiben ... %s\n", lw[0],
-           FlushFileBuffers(h) ? "ok" : "Fehler");
-
-    /*  Sperren bis zu zehnmal im Sekundentakt versuchen.  Nach dem
-     *  Schliessen einer Datei haelt der Cache-Manager noch einige
-     *  Sekunden einen Verweis, bis sein verzoegertes Schreiben durch ist;
-     *  so lange meldet FastFat "in Benutzung".  Im Test: erster Versuch
-     *  scheiterte, sechs Sekunden spaeter ging es.  */
-
-    {
-        int k;
-
-        for (k = 0; k < 10; k += 1) {
-            if (DeviceIoControl(h, FSCTL_LOCK_VOLUME_NT, NULL, 0, NULL, 0,
-                                &n, NULL)) {
-                break;
-            }
-            if (k == 0) {
-                printf("  %c: sperren ... warte auf den Cache", lw[0]);
-            } else {
-                printf(".");
-            }
-            Sleep(1000);
-            FlushFileBuffers(h);
-        }
-
-        if (k > 0) {
-            printf("\n");
-        }
-
-        if (k == 10) {
-            printf("  %c: sperren ... noch in Benutzung (Fehler %lu).\n"
-                   "  Ausgeschrieben ist, aber eine Datei ist offen -- erst\n"
-                   "  schliessen, dann noch einmal.\n\n", lw[0], GetLastError());
-            CloseHandle(h);
-            return 1;
-        }
-    }
-
-    printf("  %c: sperren ... ok\n", lw[0]);
-
-    if (!DeviceIoControl(h, FSCTL_DISMOUNT_VOLUME_NT, NULL, 0, NULL, 0, &n, NULL)) {
-        /*  Schlaegt das Abloesen fehl, darf man den Stick NICHT ziehen --
-         *  ungeschriebene Daten gingen sonst verloren.  */
-        printf("  %c: Dateisystem abloesen ... Fehler %lu\n", lw[0], GetLastError());
-        printf("\n  ACHTUNG: Nicht ziehen -- das Dateisystem ist noch eingebunden.\n\n");
-        CloseHandle(h);
-        return 1;
-    }
-    printf("  %c: Dateisystem abloesen ... ok\n", lw[0]);
-    CloseHandle(h);
-
-    printf("\n  Der Stick kann jetzt gezogen werden.\n\n");
+    printf("\n  %c: kann jetzt herausgezogen werden -- alles geschrieben, Dateisystem\n"
+           "  abgemeldet, keine Lese- und Schreibauftraege mehr.\n\n", lw[0]);
     return 0;
 }
 

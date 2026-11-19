@@ -1,3 +1,56 @@
+# Fassung 2026.11.19.71 -- USB-Laufwerk sicher entfernen, mit Bestaetigung
+
+**Wunsch:** Beim Auswerfen soll eine Bestaetigung kommen "kann herausgezogen
+werden" -- erst, wenn alles getrennt und abgemeldet ist und keine Lese- und
+Schreibvorgaenge mehr laufen.
+
+Bisher: `usbgeraet auswerfen X:` (Befehlszeile/rundll32) schrieb aus, sperrte
+und meldete das Dateisystem ab; der Treiber selbst tat beim Auswurf einer
+Platte nichts (IOCTL_DISK_EJECT_MEDIA -> sofort "Erfolg").
+
+Jetzt:
+- **Treiber (ober/ntumass.c):** IOCTL_DISK_EJECT_MEDIA und
+  IOCTL_STORAGE_EJECT_MEDIA gehen fuer Platten durch die Warteschlange.  Der
+  Arbeitsfaden arbeitet der Reihe nach -- wenn der Auswurf drankommt, ist
+  jedes vorher gestellte Lesen und Schreiben fertig.  Dann SYNCHRONIZE
+  CACHE (Puffer des Sticks), START STOP UNIT, Einheit "ausgeworfen": kein
+  Befehl mehr ans Geraet (auch nicht die Medienabfrage), Lesen/Schreiben
+  enden mit "kein Medium", bis es abgezogen und neu angesteckt wird.  Erst
+  danach geht die Meldung `ausgeworfen:X|Name|0|0` an USBTASTEN (vorhandene
+  Auftragsschlange, `ntu_helfer_melden` in ober/ntsondertasten.c).  Ist das
+  Dateisystem noch eingebunden (VPB_MOUNTED), wird nicht ausgeworfen:
+  STATUS_DEVICE_BUSY und eine Warnung.  CD/DVD: Schublade wie bisher, dazu
+  "Scheibe kann entnommen werden".
+- **USBTASTEN (Infobereich):** Menue "USB-Laufwerk sicher entfernen" mit
+  allen USB-Platten/Sticks (`\Device\UsbPlatteN`).  Auswahl: ausschreiben,
+  sperren (wartet bis 10 s auf den Cache), Dateisystem abmelden, Auswurf an
+  den Treiber.  Die Bestaetigung zeigt USBTASTEN, sobald der Treiber sie
+  schickt -- auch wenn der Auswurf aus `usbgeraet` oder dem Explorer kam.
+  Fehler (Datei noch offen usw.): "Noch NICHT herausziehen".
+- **usbgeraet auswerfen X:** benutzt denselben Ablauf (neu:
+  quelle/werkzeug/auswurf.c), schickt jetzt auch den Auswurf an den Treiber.
+
+**Wann ist das Dateisystem wirklich ab?** Aus den SP6-Symbolen (FASTFAT.SYS
+0x37c575f8, ueber OMAP_FROM_SRC zugeordnet): `FatDismountVolume` setzt nur
+den Datentraeger auf "schlecht" (`[Vcb+0x3c] = 2`); `VPB_MOUNTED` und
+`VPB_LOCKED` loescht erst `FatCheckForDismount`, wenn das letzte Handle zu
+ist.  Erster Versuch (Auswurf ablehnen, solange VPB_MOUNTED steht) lehnte
+deshalb jeden sauberen Auswurf ab.  Jetzt: auswerfen, Anfrage beantworten,
+dann bis 5 s auf das Aushaengen warten; erst dann die Bestaetigung, sonst
+eine Warnung ("ein Programm hatte es noch offen").
+Werkzeuge: pruefstand/dis2.py, omap.py (Symbole mit OMAP).
+
+Geprueft (QEMU, NT 4.0 SP6, Stick an xHCI als E:):
+- USBTASTEN-Menue -> "Laufwerk E:" -> Fenster "Das USB-Geraet E: (QEMU
+  QEMU HARDDISK) kann jetzt herausgezogen werden"; danach `dir e:` ->
+  "Das Geraet ist nicht bereit".
+- `copy c:\winnt\win.ini e:\`, dann `rundll32 usbgeraet.dll,Geraete
+  auswerfen e:` -> Bestaetigung; im Stick-Abbild danach WIN.INI (287 Byte)
+  vorhanden, `fsck.vfat -n` ohne Fehler.
+- pruefstand/maus.py: relative Mausbewegung ueber QMP (ohne Geraeteangabe;
+  mit `device` lehnt QEMU ab, weil die USB-Maus an keine Konsole gebunden
+  ist).
+
 # Fassung 2026.11.19.70 -- Durchsicht .68/.69, Bau mit dem NT-4.0-DDK wieder moeglich
 
 Durchgesehen: 852e226 (.68, xHCI-Faehigkeitenkette) und dc7d7e7 (.69, USB-CD

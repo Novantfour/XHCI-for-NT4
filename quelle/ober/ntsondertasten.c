@@ -293,6 +293,34 @@ ntu_sonder_setzen (int i, const char *text)
     return STATUS_SUCCESS;
 }
 
+/*  Eine Meldung fuer USBTASTEN.EXE einreihen, die nicht von einer Taste
+ *  kommt (z.B. "ausgeworfen:E|Name|0|0" von umass).  Index 0xFFFFFFFF.
+ *  Jede IRQL bis DISPATCH_LEVEL.  1 = eingereiht.  */
+int
+ntu_helfer_melden (const char *text)
+{
+    KIRQL alt;
+    int   ok = 0;
+
+    if (!ntu_sonder_bereit) {
+        return 0;
+    }
+    ntu_sonder_ereignis_anlegen();          /* nur auf PASSIVE_LEVEL */
+    KeAcquireSpinLock(&ntu_sonder_sperre, &alt);
+    if (ntu_auftrag_n < NTU_AUFTRAEGE) {
+        ULONG platz = (ntu_auftrag_kopf + ntu_auftrag_n) % NTU_AUFTRAEGE;
+        ntu_auftrag[platz].Index = 0xFFFFFFFFul;
+        strlcpy(ntu_auftrag[platz].Text, text, sizeof(ntu_auftrag[platz].Text));
+        ntu_auftrag_n += 1;
+        ok = 1;
+    }
+    if (ntu_sonder_ereignis != 0) {
+        KeSetEvent(ntu_sonder_ereignis, 0, FALSE);
+    }
+    KeReleaseSpinLock(&ntu_sonder_sperre, alt);
+    return ok;
+}
+
 /*  Einen Auftrag abholen.  1 = geholt.  Leer: Ereignis zuruecksetzen.  */
 int
 ntu_sonder_abholen (NTU_SONDER_AUFTRAG *a)

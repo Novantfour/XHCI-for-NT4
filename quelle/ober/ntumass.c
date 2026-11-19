@@ -985,6 +985,18 @@ ntum_cdfs_sicherstellen (void)
  *  CD-Laufwerk ohne Buchstaben einen eigenen.
  * ==================================================================== */
 
+/*  Das NT-4.0-DDK deklariert ZwOpenSymbolicLinkObject und
+ *  ZwQuerySymbolicLinkObject nicht (erst ntifs.h spaeterer Fassungen);
+ *  NTOSKRNL.EXE 4.0 exportiert beide.  Die freien Koepfe bringen sie mit.  */
+#ifndef NTU_FREIE_KOEPFE
+NTSYSAPI NTSTATUS NTAPI ZwOpenSymbolicLinkObject (PHANDLE LinkHandle,
+                                                  ACCESS_MASK DesiredAccess,
+                                                  POBJECT_ATTRIBUTES ObjectAttributes);
+NTSYSAPI NTSTATUS NTAPI ZwQuerySymbolicLinkObject (HANDLE LinkHandle,
+                                                   PUNICODE_STRING LinkTarget,
+                                                   PULONG ReturnedLength);
+#endif
+
 typedef VOID (__fastcall *ntum_hal_buchst_t)(PVOID, PVOID, PVOID, PVOID);
 
 /*  HALDISPATCH: im DDK wie in den freien Koepfen die Adresse der Tabelle.  */
@@ -1073,9 +1085,13 @@ ntum_hal_buchstaben (PVOID a, PVOID b, PVOID c, PVOID d)
 
     ntum_hal_alt(a, b, c, d);
 
-    InterlockedCompareExchange((PLONG)&NTUM_HAL_TAB[NTUM_HAL_BUCHST],
-                               (LONG)(ULONG_PTR)ntum_hal_alt,
-                               (LONG)(ULONG_PTR)ntum_hal_buchstaben);
+    /*  Nur zuruecksetzen, wenn noch unser Haken drinsteht.  Als
+     *  Compiler-Baustein (lock cmpxchg): InterlockedCompareExchange hat im
+     *  NT-4.0-DDK Zeiger-, in den freien Koepfen LONG-Parameter.  */
+    (void)__sync_val_compare_and_swap(
+            (volatile LONG *)&NTUM_HAL_TAB[NTUM_HAL_BUCHST],
+            (LONG)(ULONG_PTR)ntum_hal_buchstaben,
+            (LONG)(ULONG_PTR)ntum_hal_alt);
     InterlockedExchange(&ntum_hal_wartet, 0);
 
     for (dev = NtuDriverObject ? NtuDriverObject->DeviceObject : 0; dev != 0; dev = dev->NextDevice) {

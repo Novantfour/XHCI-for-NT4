@@ -1,3 +1,33 @@
+# Fassung 2026.11.19.70 -- Durchsicht .68/.69, Bau mit dem NT-4.0-DDK wieder moeglich
+
+Durchgesehen: 852e226 (.68, xHCI-Faehigkeitenkette) und dc7d7e7 (.69, USB-CD
+nicht doppelt).
+
+- **.69 liess sich mit dem NT-4.0-DDK nicht bauen** (wie schon .54 mit
+  ZwLoadDriver): ZwOpenSymbolicLinkObject und ZwQuerySymbolicLinkObject sind
+  dort nicht deklariert, InterlockedCompareExchange hat Zeiger- statt
+  LONG-Parameter.  Beide Zw-Funktionen exportiert NTOSKRNL.EXE 4.0
+  (NTOSKRNL.LIB des DDK).  Jetzt: Deklarationen unter
+  `#ifndef NTU_FREIE_KOEPFE`, das Zuruecksetzen des HAL-Hakens als
+  `__sync_val_compare_and_swap` (lock cmpxchg, ohne Einfuhr, in beiden
+  Kopfsaetzen gleich).  ober/ntumass.c.
+- Geprueft und richtig: der Haken liest den Einfuhrplatz von
+  `HalDispatchTable` als Adresse der Tabelle (`mov eax,[IAT]`,
+  `[eax+0x18]`) -- kein Sprung-Thunk wie damals bei KeNumberProcessors;
+  Platz 6 ist laut DDK `HalIoAssignDriveLetters` (fastcall, 4 Argumente,
+  `ret 8` passt).  Die xHCI-Kette (.68) bildet je Faehigkeit +0x40 ab,
+  hoechstens 64 Glieder und 256 kB.
+- Klein, nicht geaendert: die Meldung "Kette der Faehigkeiten bis xxxxx"
+  nennt die Abbildungsgroesse, nicht das Ende der Kette.
+
+Starttest (DDK-Bau, QEMU, USB-CD an xHCI, usbnt nicht als Starttreiber):
+Fassung .70 laedt, "xhci: Kette der Faehigkeiten bis 03000, abgebildet
+12 kB", Stick D:, CD E: (je ein Buchstabe), Anmeldebild.  Der Weg als
+Starttreiber (HAL-Haken) ist hier nicht neu geprueft.  Der freie Bau
+(bau-frei.sh) bindet in dieser Umgebung nicht (InterlockedBitTestAndSet
+doppelt in ehci.obj/hid.obj -- mingw-Fassung, unabhaengig von dieser
+Aenderung).
+
 # Fassung 2026.11.19.69 -- USB-CD nicht mehr doppelt (D: und E:)
 
 **Dieselbe CD stand zweimal im Arbeitsplatz** (M720q, USB-DVD-Laufwerk).

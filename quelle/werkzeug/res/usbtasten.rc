@@ -1,2 +1,17 @@
-/* USBTASTEN: Symbol fuer den Infobereich. */
-1 ICON "usbtasten.ico"
+/* USBTASTEN: Symbole fuer den Infobereich (erzeugt von mk-usbtasten-ico.py).
+ *   1  kein USB-Laufwerk (auch Symbol der EXE)
+ *   2  ein Laufwerk angeschlossen
+ *   3  Auswurf laeuft / kann herausgezogen werden
+ *  12..19  zwei bis neun Laufwerke, 20 zehn und mehr  */
+1  ICON "usbtasten.ico"
+2  ICON "usb-haken.ico"
+3  ICON "usb-auswurf.ico"
+12 ICON "usb-anzahl-2.ico"
+13 ICON "usb-anzahl-3.ico"
+14 ICON "usb-anzahl-4.ico"
+15 ICON "usb-anzahl-5.ico"
+16 ICON "usb-anzahl-6.ico"
+17 ICON "usb-anzahl-7.ico"
+18 ICON "usb-anzahl-8.ico"
+19 ICON "usb-anzahl-9.ico"
+20 ICON "usb-anzahl-mehr.ico"

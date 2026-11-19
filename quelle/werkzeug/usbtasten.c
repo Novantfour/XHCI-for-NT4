@@ -4,7 +4,9 @@
  *  "stumm", "programm:<befehl>").
  *
  *  Sichtbar: Symbol im Infobereich der Taskleiste (Kurzinfo, Menue mit
- *  "Beenden").  Frueher lief das Programm unsichtbar -- "unsichtbar +
+ *  "Beenden").  Das Symbol zeigt den Zustand der USB-Laufwerke: keins
+ *  (grauer Dreizack), eins (gruener Haken), Auswurf laeuft bzw. kann
+ *  gezogen werden (Auswurfzeichen), mehrere (Zahl).  Frueher lief das Programm unsichtbar -- "unsichtbar +
  *  Autostart + startet Programme auf Tastendruck" ist fuer Virenscanner
  *  das Muster eines Keyloggers.  Jetzt ist es ein gewoehnliches
  *  Hilfsprogramm mit Symbol, wie es Tastatur- und Maustreiber mitbringen.
@@ -33,6 +35,8 @@
 void *memset (void *z, int c, unsigned int n) { unsigned char *p = z; while (n--) *p++ = (unsigned char)c; return z; }
 
 #define WM_SYMBOL      (WM_APP + 1)
+#define WM_ZUSTAND     (WM_APP + 2)   /* Laufwerke neu zaehlen, Symbol setzen */
+#define TAKT_ZUSTAND   1              /* SetTimer: alle 1 s nachsehen */
 #define ID_BEENDEN     100
 #define ID_INFO        101
 #define ID_AUSWURF     200            /* + 0..25: Laufwerk A..Z */
@@ -44,6 +48,19 @@ void *memset (void *z, int c, unsigned int n) { unsigned char *p = z; while (n--
 static HINSTANCE gInst;
 static HWND      gFenster;
 static UINT      gTaskleisteNeu;
+
+/*  Zustand fuer das Symbol.  gAus[i]: Laufwerk 'A'+i ist ausgeworfen
+ *  (Meldung vom Treiber), der Buchstabe besteht aber noch -- der Stick
+ *  steckt.  Beim Abziehen loescht der Treiber den Buchstaben, dann
+ *  verschwindet auch die Marke.  gZiel[i] merkt das NT-Geraet dazu, damit
+ *  ein neu angestecktes Geraet unter demselben Buchstaben nicht als
+ *  ausgeworfen gilt.  */
+static volatile LONG gAus[26];
+static char          gZiel[26][40];
+static volatile LONG gAuswurfLaeuft;   /* Zahl laufender Auswuerfe */
+static HICON         gSymbol[21];      /* nach Ressourcennummer */
+static int           gSymbolJetzt = -1;
+static char          gTipJetzt[64];
 
 /* ---------------- Lautstaerke ---------------- */
 
@@ -220,6 +237,17 @@ ausgeworfen (const char *p)
     if (*q == '|') { q++; warn = (*q == '1'); while (*q && *q != '|') q++; }
     if (*q == '|') { q++; cd = (*q == '1'); }
 
+    if (bu >= 'A' && bu <= 'Z' && !cd) {
+        char z[64];
+        if (usb_laufwerk(bu, z, sizeof(z))) {
+            lstrcpynA(gZiel[bu - 'A'], z, sizeof(gZiel[0]));
+        }
+        InterlockedExchange((LONG *)&gAus[bu - 'A'], 1);
+    }
+    if (gFenster) {
+        PostMessageA(gFenster, WM_ZUSTAND, 0, 0);
+    }
+
     if (warn) {
         wsprintfA(t, "Das Laufwerk %c: (%s) ist angehalten, aber das Dateisystem "
                      "war nicht abgemeldet: ein Programm hatte es noch offen, oder es "
@@ -249,9 +277,13 @@ auswerfen_faden (LPVOID p)
     char lw = (char)(UINT_PTR)p;
     char m[400];
 
+    InterlockedIncrement((LONG *)&gAuswurfLaeuft);
+    PostMessageA(gFenster, WM_ZUSTAND, 0, 0);
     if (usb_auswerfen(lw, m, sizeof(m), 0) != AUSWURF_OK) {
         meldung_zeigen('!', m);
     }
+    InterlockedDecrement((LONG *)&gAuswurfLaeuft);
+    PostMessageA(gFenster, WM_ZUSTAND, 0, 0);
     return 0;
 }
 
@@ -315,10 +347,91 @@ abholer (LPVOID unbenutzt)
 
 /* ---------------- Symbol im Infobereich ---------------- */
 
+/*  Welches Symbol, welche Kurzinfo?
+ *    kein USB-Laufwerk              1  grauer Dreizack
+ *    Auswurf laeuft / ausgeworfen,  3  Auswurfzeichen
+ *      Stick steckt noch
+ *    ein Laufwerk                   2  gruener Haken
+ *    zwei bis neun / mehr        12-20 Zahl  */
+static int
+zustand (char *tip, int max)
+{
+    char lw, z[64], liste[80];
+    int  n = 0, aus = 0, l = 0;
+    char erstes = 0, erstesAus = 0;
+
+    liste[0] = '\0';
+    for (lw = 'C'; lw <= 'Z'; lw += 1) {
+        int i = lw - 'A';
+        if (!usb_laufwerk(lw, z, sizeof(z))) {
+            gAus[i] = 0;                       /* abgezogen */
+            continue;
+        }
+        if (gAus[i] && lstrcmpiA(z, gZiel[i]) != 0) {
+            gAus[i] = 0;                       /* anderes Geraet, gleicher Buchstabe */
+        }
+        if (gAus[i]) {
+            aus += 1;
+            if (!erstesAus) erstesAus = lw;
+            continue;
+        }
+        n += 1;
+        if (!erstes) erstes = lw;
+        if (l < (int)sizeof(liste) - 4) {
+            liste[l++] = ' '; liste[l++] = lw; liste[l++] = ':'; liste[l] = '\0';
+        }
+    }
+
+    if (gAuswurfLaeuft > 0) {
+        lstrcpynA(tip, "USB: Laufwerk wird ausgeworfen ...", max);
+        return 3;
+    }
+    if (aus > 0) {
+        if (aus == 1) {
+            wsprintfA(z, "USB: %c: kann herausgezogen werden", erstesAus);
+        } else {
+            wsprintfA(z, "USB: %d Laufwerke k\xf6nnen herausgezogen werden", aus);
+        }
+        lstrcpynA(tip, z, max);
+        return 3;
+    }
+    if (n == 0) {
+        lstrcpynA(tip, "USB: kein Laufwerk angeschlossen", max);
+        return 1;
+    }
+    if (n == 1) {
+        wsprintfA(z, "USB: Laufwerk %c: angeschlossen", erstes);
+        lstrcpynA(tip, z, max);
+        return 2;
+    }
+    wsprintfA(z, "USB: %d Laufwerke -%s", n, liste);
+    lstrcpynA(tip, z, max);
+    return n >= 10 ? 20 : 10 + n;
+}
+
+static HICON
+symbol_laden (int nr)
+{
+    if (gSymbol[nr] == NULL) {
+        gSymbol[nr] = (HICON)LoadImageA(gInst, MAKEINTRESOURCEA(nr), IMAGE_ICON, 16, 16, 0);
+    }
+    return gSymbol[nr];
+}
+
+/*  NIM_ADD/NIM_DELETE: immer.  Sonst (NIM_MODIFY) nur, wenn sich etwas
+ *  geaendert hat -- der Takt laeuft jede Sekunde.  */
 static void
 symbol (DWORD was)
 {
     NOTIFYICONDATAA n;
+    char            tip[64];
+    int             nr = zustand(tip, sizeof(tip));
+
+    if (was == NIM_MODIFY && nr == gSymbolJetzt && lstrcmpA(tip, gTipJetzt) == 0) {
+        return;
+    }
+    gSymbolJetzt = nr;
+    lstrcpynA(gTipJetzt, tip, sizeof(gTipJetzt));
 
     ZeroMemory(&n, sizeof(n));
     n.cbSize           = NID_V1_GROESSE;
@@ -326,8 +439,8 @@ symbol (DWORD was)
     n.uID              = 1;
     n.uFlags           = NIF_ICON | NIF_TIP | NIF_MESSAGE;
     n.uCallbackMessage = WM_SYMBOL;
-    n.hIcon            = (HICON)LoadImageA(gInst, MAKEINTRESOURCEA(1), IMAGE_ICON, 16, 16, 0);
-    lstrcpynA(n.szTip, "USB: Sondertasten, Laufwerk sicher entfernen", 64);
+    n.hIcon            = symbol_laden(nr);
+    lstrcpynA(n.szTip, tip, 64);
     Shell_NotifyIconA(was, &n);
 }
 
@@ -378,6 +491,10 @@ fensterfunktion (HWND h, UINT msg, WPARAM wp, LPARAM lp)
             menue();
         }
         return 0;
+    case WM_TIMER:
+    case WM_ZUSTAND:
+        symbol(NIM_MODIFY);
+        return 0;
     case WM_COMMAND:
         if (LOWORD(wp) >= ID_AUSWURF && LOWORD(wp) < ID_AUSWURF + 26) {
             DWORD tid;
@@ -401,6 +518,7 @@ fensterfunktion (HWND h, UINT msg, WPARAM wp, LPARAM lp)
         }
         return 0;
     case WM_DESTROY:
+        KillTimer(h, TAKT_ZUSTAND);
         symbol(NIM_DELETE);
         PostQuitMessage(0);
         return 0;
@@ -439,6 +557,10 @@ WinMain (HINSTANCE inst, HINSTANCE vorher, LPSTR zeile, int zeigen)
     }
     gTaskleisteNeu = RegisterWindowMessageA("TaskbarCreated");
     symbol(NIM_ADD);
+    /*  NT 4.0 meldet neue Laufwerksbuchstaben eines Kerntreibers nicht
+     *  (kein WM_DEVICECHANGE dafuer): einmal je Sekunde nachsehen --
+     *  24 QueryDosDevice, keine Geraetezugriffe.  */
+    SetTimer(gFenster, TAKT_ZUSTAND, 1000, NULL);
 
     CloseHandle(CreateThread(NULL, 0, abholer, NULL, 0, &tid));
 

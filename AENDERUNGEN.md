@@ -1,3 +1,30 @@
+# Fassung 2026.11.19.73 -- Tray-Symbol zeigt den Zustand der USB-Laufwerke
+
+**Wunsch:** Vier Zustaende nach Vorlage des Nutzers (USB-Dreizack mit
+Plakette): getrennt (grau), verbunden (gruener Haken), auswerfen
+(Auswurfzeichen), mehrere Geraete (Anzahl).  Die mitgelieferten Bilder
+(PNG-Symbole mit weichem Schatten) sind bei 16x16 kaum erkennbar und unter
+NT 4.0 gar nicht ladbar (kein PNG, kein Alphakanal) -- daher eigene,
+pixelgenau gesetzte Symbole in derselben Bildsprache, Zahlen bei 16x16 in
+5x7 Pixeln.
+
+- `res/mk-usbtasten-ico.py` erzeugt usbtasten.ico (kein Laufwerk, auch
+  EXE-Symbol), usb-haken.ico, usb-auswurf.ico, usb-anzahl-2..9.ico,
+  usb-anzahl-mehr.ico (ab 10); 16/32 px, 4 und 8 Bit, UND-Maske.
+- USBTASTEN zaehlt jede Sekunde die USB-Laufwerke (QueryDosDevice ->
+  \Device\UsbPlatteN; NT 4.0 meldet Buchstaben von Kerntreibern nicht
+  per WM_DEVICECHANGE) und setzt Symbol und Kurzinfo nur bei Aenderung
+  (NIM_MODIFY).  Ausgeworfen-Marke aus der Treibermeldung "ausgeworfen:",
+  bis der Buchstabe verschwindet (Stick gezogen) oder auf ein anderes
+  Geraet zeigt.  Vorrang: Auswurf laeuft/ausgeworfen > Anzahl.
+- Kurzinfos: "USB: kein Laufwerk angeschlossen", "USB: Laufwerk E:
+  angeschlossen", "USB: E: kann herausgezogen werden", "USB: 3 Laufwerke -
+  E: F: G:".
+
+Erprobt unter QEMU (NT 4.0 SP6, xHCI): Haken mit einem Stick, Auswurf
+ueber das Menue -> Auswurfzeichen und Bestaetigung, Abziehen -> grauer
+Dreizack, drei Sticks -> "3".
+
 # Fassung 2026.11.19.72 -- neues Symbol fuer USBTASTEN im Infobereich
 
 **Wunsch:** Das Tray-Symbol passte nicht mehr zur Funktion (Lautsprecher aus

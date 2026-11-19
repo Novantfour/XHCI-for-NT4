@@ -131,6 +131,7 @@ typedef struct ntum_erweiterung {
     ULONG               Nummer;
     WCHAR               Buchstabe;
     int                 Cd;          /* \\Device\\CdRomN statt UsbPlatteN */
+    LONG                Vergeben;    /* Buchstabe geklaert (einmal, s. unten) */
 } ntum_erweiterung;
 
 typedef struct ntum_auftrag {
@@ -970,16 +971,152 @@ ntum_cdfs_sicherstellen (void)
     ExQueueWorkItem(&ntum_cdfs_arbeit, DelayedWorkQueue);
 }
 
+/* ====================================================================
+ *  Laufwerksbuchstaben
+ *
+ *  NT 4.0 vergibt in IoAssignDriveLetters (nach den Starttreibern) jedem
+ *  \\Device\\CdRomN unter CdRomCount einen Buchstaben -- auch unseren, die
+ *  wir fuer die ARC-Namen mitzaehlen.  Haette usbnt dann schon selbst
+ *  einen vergeben, stuende dieselbe Scheibe zweimal im Arbeitsplatz.
+ *
+ *  Deshalb haengt sich usbnt (nur als Starttreiber) einmal vor
+ *  HalDispatchTable->HalIoAssignDriveLetters: bis NT seine Buchstaben
+ *  vergeben hat, vergibt umass fuer CDs keine; danach bekommt jedes
+ *  CD-Laufwerk ohne Buchstaben einen eigenen.
+ * ==================================================================== */
+
+typedef VOID (__fastcall *ntum_hal_buchst_t)(PVOID, PVOID, PVOID, PVOID);
+
+/*  HALDISPATCH: im DDK wie in den freien Koepfen die Adresse der Tabelle.  */
+#define NTUM_HAL_TAB     ((ULONG_PTR *)HALDISPATCH)
+#define NTUM_HAL_BUCHST  6                  /* HalIoAssignDriveLetters */
+
+static volatile LONG     ntum_hal_wartet;
+static ntum_hal_buchst_t ntum_hal_alt;
+
+/*  Zeigt schon ein \\DosDevices\\X: auf das Geraet?  Liefert X oder 0.  */
+static WCHAR
+ntum_buchstabe_suchen (PUNICODE_STRING geraet)
+{
+    WCHAR             lname[16], zpuf[64];
+    UNICODE_STRING    ul, ziel;
+    OBJECT_ATTRIBUTES oa;
+    HANDLE            h;
+    WCHAR             b;
+
+    for (b = L'C'; b <= L'Z'; b += 1) {
+
+        lname[0] = L'\\'; lname[1] = L'D'; lname[2] = L'o'; lname[3] = L's';
+        lname[4] = L'D'; lname[5] = L'e'; lname[6] = L'v'; lname[7] = L'i';
+        lname[8] = L'c'; lname[9] = L'e'; lname[10] = L's'; lname[11] = L'\\';
+        lname[12] = b; lname[13] = L':'; lname[14] = 0;
+        RtlInitUnicodeString(&ul, lname);
+        InitializeObjectAttributes(&oa, &ul, OBJ_CASE_INSENSITIVE, 0, 0);
+
+        if (!NT_SUCCESS(ZwOpenSymbolicLinkObject(&h, GENERIC_READ, &oa))) {
+            continue;
+        }
+        ziel.Buffer        = zpuf;
+        ziel.Length        = 0;
+        ziel.MaximumLength = sizeof(zpuf);
+        if (NT_SUCCESS(ZwQuerySymbolicLinkObject(h, &ziel, 0)) &&
+            RtlEqualUnicodeString(&ziel, geraet, TRUE)) {
+            ZwClose(h);
+            return b;
+        }
+        ZwClose(h);
+    }
+    return 0;
+}
+
+/*  Genau einmal je Geraet: vorhandenen Buchstaben uebernehmen, sonst den
+ *  ersten freien ab D:.  IoCreateSymbolicLink scheitert an einem belegten
+ *  Namen -- das ist die Pruefung, ohne Wettlauf zwischen Nachsehen und
+ *  Anlegen.  */
+static void
+ntum_buchstabe_klaeren (ntum_erweiterung *x, PUNICODE_STRING geraet)
+{
+    WCHAR          lname[16];
+    UNICODE_STRING ul;
+    WCHAR          b;
+
+    if (InterlockedExchange(&x->Vergeben, 1) != 0) {
+        return;
+    }
+
+    b = ntum_buchstabe_suchen(geraet);
+    if (b != 0) {
+        x->Buchstabe = b;
+        ntu_printf("umass: %c: von NT vergeben\n", (char)b);
+        return;
+    }
+
+    for (b = L'D'; b <= L'Z'; b += 1) {
+
+        lname[0] = L'\\'; lname[1] = L'D'; lname[2] = L'o'; lname[3] = L's';
+        lname[4] = L'D'; lname[5] = L'e'; lname[6] = L'v'; lname[7] = L'i';
+        lname[8] = L'c'; lname[9] = L'e'; lname[10] = L's'; lname[11] = L'\\';
+        lname[12] = b; lname[13] = L':'; lname[14] = 0;
+        RtlInitUnicodeString(&ul, lname);
+
+        if (NT_SUCCESS(IoCreateSymbolicLink(&ul, geraet))) {
+            x->Buchstabe = b;
+            break;
+        }
+    }
+}
+
+static VOID __fastcall
+ntum_hal_buchstaben (PVOID a, PVOID b, PVOID c, PVOID d)
+{
+    PDEVICE_OBJECT dev;
+
+    ntum_hal_alt(a, b, c, d);
+
+    InterlockedCompareExchange((PLONG)&NTUM_HAL_TAB[NTUM_HAL_BUCHST],
+                               (LONG)(ULONG_PTR)ntum_hal_alt,
+                               (LONG)(ULONG_PTR)ntum_hal_buchstaben);
+    InterlockedExchange(&ntum_hal_wartet, 0);
+
+    for (dev = NtuDriverObject ? NtuDriverObject->DeviceObject : 0; dev != 0; dev = dev->NextDevice) {
+
+        ntum_erweiterung *x = (ntum_erweiterung *)dev->DeviceExtension;
+        WCHAR             dname[32];
+        UNICODE_STRING    un;
+
+        if (dev->DeviceType != FILE_DEVICE_CD_ROM ||
+            x->Port.Kind != NTU_PORT_PLATTE || !x->Cd) {
+            continue;
+        }
+        ntu_wsprintf(dname, 32, L"\\Device\\CdRom%u", x->Nummer);
+        RtlInitUnicodeString(&un, dname);
+        ntum_buchstabe_klaeren(x, &un);
+    }
+}
+
+/*  Aus DriverEntry, nur wenn usbnt als Starttreiber (Start = 0) laeuft:
+ *  dann kommt IoAssignDriveLetters noch.  */
+void
+ntum_buchstaben_einhaengen (void)
+{
+    ntum_hal_alt = (ntum_hal_buchst_t)NTUM_HAL_TAB[NTUM_HAL_BUCHST];
+    if (ntum_hal_alt == 0) {
+        return;
+    }
+    InterlockedExchange(&ntum_hal_wartet, 1);
+    InterlockedExchange((PLONG)&NTUM_HAL_TAB[NTUM_HAL_BUCHST],
+                        (LONG)(ULONG_PTR)ntum_hal_buchstaben);
+}
+
 static int
 ntum_nt_anlegen (ntum_einheit *E)
 {
-    WCHAR             dname[32], lname[24];
-    UNICODE_STRING    un, ul;
+    WCHAR             dname[32];
+    UNICODE_STRING    un;
     PDEVICE_OBJECT    dev = 0;
     ntum_erweiterung *x;
     NTSTATUS          st;
     ULONG             n;
-    WCHAR             b;
     KIRQL             alt;
 
     if (!ntum_bereit) {
@@ -1076,22 +1213,12 @@ ntum_nt_anlegen (ntum_einheit *E)
     dev->SectorSize     = E->cd ? 2048 : 512;
     dev->Flags         &= ~DO_DEVICE_INITIALIZING;
 
-    /*  Laufwerksbuchstabe: der erste freie ab D:.  IoCreateSymbolicLink
-     *  scheitert an einem belegten Namen -- das ist die Pruefung, ohne
-     *  Wettlauf zwischen Nachsehen und Anlegen.  */
+    /*  Laufwerksbuchstabe.  Ein CD-Laufwerk, das vor IoAssignDriveLetters
+     *  entsteht, bekommt seinen Buchstaben von NT (es zaehlt in CdRomCount);
+     *  dann hier keinen zweiten (sonst D: und E: fuer dieselbe Scheibe).  */
 
-    for (b = L'D'; b <= L'Z'; b += 1) {
-
-        lname[0] = L'\\'; lname[1] = L'D'; lname[2] = L'o'; lname[3] = L's';
-        lname[4] = L'D'; lname[5] = L'e'; lname[6] = L'v'; lname[7] = L'i';
-        lname[8] = L'c'; lname[9] = L'e'; lname[10] = L's'; lname[11] = L'\\';
-        lname[12] = b; lname[13] = L':'; lname[14] = 0;
-        RtlInitUnicodeString(&ul, lname);
-
-        if (NT_SUCCESS(IoCreateSymbolicLink(&ul, &un))) {
-            x->Buchstabe = b;
-            break;
-        }
+    if (!(x->Cd && ntum_hal_wartet)) {
+        ntum_buchstabe_klaeren(x, &un);
     }
 
     E->nt = dev;

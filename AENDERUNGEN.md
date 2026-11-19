@@ -1,3 +1,22 @@
+# Fassung 2026.11.19.69 -- USB-CD nicht mehr doppelt (D: und E:)
+
+**Dieselbe CD stand zweimal im Arbeitsplatz** (M720q, USB-DVD-Laufwerk).
+umass legt `\Device\CdRomN` an und zaehlt CdRomCount hoch (fuer die
+ARC-Namen im Setup noetig) -- und vergab selbst einen Buchstaben.  Entsteht
+das Laufwerk vor `IoAssignDriveLetters` (nach den Starttreibern), vergibt NT
+fuer dasselbe Geraet einen zweiten.
+
+Jetzt (ober/ntumass.c, nt/ntusbnt.c): als Starttreiber (Start = 0) haengt sich
+usbnt einmal vor `HalDispatchTable->HalIoAssignDriveLetters` (fastcall,
+Platz 6).  Bis NT seine Buchstaben vergeben hat, vergibt umass fuer CDs
+keinen; danach bekommt jedes CD-Laufwerk ohne Buchstaben genau einen
+(vorhandenen uebernehmen, sonst den ersten freien ab D:).  Spaeter
+angesteckte Laufwerke wie bisher.
+
+Geprueft: QEMU, NVMe-Start, SP6a, USB-CD an qemu-xhci: nur D:
+("umass: D: von NT vergeben"); Abziehen und Wiederanstecken: D: wieder frei
+bzw. neu, kein Stop.
+
 # Fassung 2026.11.19.68 -- xHCI: ganze Kette der erweiterten Faehigkeiten abbilden
 
 **STOP 0x50 (PAGE_FAULT_IN_NONPAGED_AREA) im Textmodus-Setup auf dem Lenovo

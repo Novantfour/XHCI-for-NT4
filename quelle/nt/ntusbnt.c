@@ -738,6 +738,34 @@ DriverEntry (PDRIVER_OBJECT drv, PUNICODE_STRING reg)
     ntu_printf("\r\n%s: FreeBSD-USB auf NT 4.0, Fassung %s\n", NTU_BAUART, NTU_DATEIFASSUNG);
     ntu_treiberobjekt = drv;
 
+    /*  Starttreiber (Start = 0)?  Dann vergibt NT nach den Starttreibern
+     *  die Laufwerksbuchstaben -- umass wartet fuer CDs darauf, damit
+     *  dieselbe Scheibe nicht zwei Buchstaben bekommt (ntumass.c).  */
+    {
+        extern void ntum_buchstaben_einhaengen (void);
+        RTL_QUERY_REGISTRY_TABLE t[2];
+        ULONG start = 3, vorgabe = 3;
+        WCHAR pfad[260];
+        ULONG n = reg->Length / sizeof(WCHAR);
+
+        if (n < 250) {
+            memcpy(pfad, reg->Buffer, n * sizeof(WCHAR));
+            pfad[n] = 0;
+            memset(t, 0, sizeof(t));
+            t[0].Flags         = RTL_QUERY_REGISTRY_DIRECT;
+            t[0].Name          = L"Start";
+            t[0].EntryContext  = &start;
+            t[0].DefaultType   = REG_DWORD;
+            t[0].DefaultData   = &vorgabe;
+            t[0].DefaultLength = sizeof(ULONG);
+            if (NT_SUCCESS(RtlQueryRegistryValues(RTL_REGISTRY_ABSOLUTE,
+                                                  pfad, t, 0, 0)) &&
+                start == 0) {
+                ntum_buchstaben_einhaengen();
+            }
+        }
+    }
+
 #if !defined(NTU_KISERIAL) && !defined(NTU_OHNE_SERIELL)
     /*  Ab hier geht die Ausgabe ueber den Ringpuffer -- nichts im
      *  Treiber wartet mehr auf den seriellen Anschluss.  */
